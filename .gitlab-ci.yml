@@ -1,0 +1,14 @@
+# GitLab Pages: publish the static site in docs/ on every push to the default branch.
+# The GitHub repository pushes here automatically (.github/workflows/mirror-to-gitlab.yml).
+pages:
+  stage: deploy
+  image: alpine:3.20
+  interruptible: true # a newer push cancels an older, still-running deploy
+  script:
+    - rm -rf public
+    - cp -r docs public
+  artifacts:
+    paths:
+      - public
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH

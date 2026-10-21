@@ -1,0 +1,42 @@
+# Copies the main branch to GitLab after every push (including saves from the admin panel).
+# GitLab then publishes the site with GitLab Pages (see .gitlab-ci.yml).
+#
+# Needs two repository secrets (GitHub → Settings → Secrets and variables → Actions):
+#   GITLAB_PROJECT  path of the GitLab project, e.g. "your-gitlab-username/backwash-link-generator"
+#   GITLAB_TOKEN    GitLab personal access token with the "write_repository" scope
+# Optional secret GITLAB_HOST for a self-hosted GitLab (default: gitlab.com).
+name: Mirror to GitLab
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: mirror-to-gitlab
+  cancel-in-progress: true # a newer push already contains the older commits
+
+jobs:
+  mirror:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Push main to GitLab
+        env:
+          GITLAB_PROJECT: ${{ secrets.GITLAB_PROJECT }}
+          GITLAB_TOKEN: ${{ secrets.GITLAB_TOKEN }}
+          GITLAB_HOST: ${{ secrets.GITLAB_HOST }}
+        run: |
+          if [ -z "$GITLAB_PROJECT" ] || [ -z "$GITLAB_TOKEN" ]; then
+            echo "::error::Add the GITLAB_PROJECT and GITLAB_TOKEN secrets (see the README, 'Put the site online')."
+            exit 1
+          fi
+          host="${GITLAB_HOST:-gitlab.com}"
+          project="${GITLAB_PROJECT#/}"
+          project="${project%.git}"
+          # GitLab accepts a personal access token as the password with any username.
+          git push "https://oauth2:${GITLAB_TOKEN}@${host}/${project}.git" HEAD:refs/heads/main
