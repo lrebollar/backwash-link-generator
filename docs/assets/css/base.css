@@ -350,6 +350,133 @@ img {
   padding: 28px 20px;
 }
 
+/* Design switcher ("Change design" button, page.js). Fixed colours on purpose:
+   it has to read on every theme, so it does not use the theme variables. */
+.theme-switcher {
+  position: fixed;
+  right: calc(16px + env(safe-area-inset-right));
+  bottom: calc(16px + env(safe-area-inset-bottom));
+  z-index: 50;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  font-size: 14px;
+}
+
+.theme-switcher__toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  padding: 0;
+  border-radius: 50%;
+  background: rgba(17, 17, 17, 0.88);
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+  cursor: pointer;
+}
+
+.theme-switcher__toggle svg {
+  display: block;
+  width: 22px;
+  height: 22px;
+}
+
+.theme-switcher__menu {
+  position: absolute;
+  right: 0;
+  bottom: 58px;
+  min-width: 200px;
+  max-height: calc(100dvh - 90px);
+  overflow-y: auto;
+  padding: 6px;
+  background: rgba(17, 17, 17, 0.94);
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 14px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+}
+
+.theme-switcher__menu[hidden] {
+  display: none;
+}
+
+.theme-switcher__menu button {
+  position: relative;
+  display: block;
+  width: 100%;
+  margin: 0;
+  padding: 10px 12px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.theme-switcher__menu button:hover,
+.theme-switcher__menu button:focus-visible {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.theme-switcher :focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 2px;
+}
+
+.theme-switcher__menu:focus {
+  outline: none;
+}
+
+.theme-switcher__toggle:focus-visible {
+  box-shadow: 0 0 0 4px #111, 0 6px 20px rgba(0, 0, 0, 0.35);
+}
+
+.theme-switcher__menu [aria-checked="true"] {
+  font-weight: 700;
+  padding-right: 36px;
+}
+
+.theme-switcher__menu [aria-checked="true"]::after {
+  content: "\2713";
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.theme-switcher__title,
+.theme-switcher__hint {
+  margin: 0;
+  padding: 6px 12px;
+  font-size: 12px;
+  opacity: 0.7;
+}
+
+.theme-switcher__sep {
+  height: 1px;
+  margin: 4px 6px;
+  background: rgba(255, 255, 255, 0.15);
+}
+
+/* Room for the button, so it never covers the footer */
+body.has-theme-switcher .page {
+  padding-bottom: calc(96px + env(safe-area-inset-bottom));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .theme-switcher__menu button {
+    transition: none;
+  }
+}
+
 /* Loading: hide the page until data and theme are ready */
 body.is-loading .page {
   visibility: hidden;
