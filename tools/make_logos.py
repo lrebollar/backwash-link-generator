@@ -193,6 +193,19 @@ def color_logo(src, name):
     return save_png(im, name)
 
 
+def mono_wordmark(colour, name):
+    """Single-colour wordmark: the bright letter fills (yellow BACKWASH, red RECORDS) become solid,
+    the black outline becomes transparent. alpha = cut-out alpha * max(R, G, B)."""
+    cut = np.asarray(cutout('wordmark-red.jpg')).astype(np.float32)
+    value = cut[..., :3].max(axis=2)
+    alpha = cut[..., 3] * np.clip((value - 60.0) / (200.0 - 60.0), 0.0, 1.0)
+    rgba = np.empty(cut.shape[:2] + (4,), np.uint8)
+    rgba[..., :3] = colour
+    rgba[..., 3] = np.round(alpha).astype(np.uint8)
+    im = fit_longest(trim_to_content(Image.fromarray(rgba)))
+    return save_png(im, name)
+
+
 def art_square(pad=0.06):
     """Square crop of mascot-red tightly around the artwork, bg kept opaque."""
     img = load_src('mascot-red.jpg')
@@ -223,6 +236,8 @@ def main():
     written.append(color_logo('logo-yellow.jpg', 'logo-color.png'))
     written.append(color_logo('mascot-red.jpg', 'mark-color.png'))
     written.append(color_logo('wordmark-red.jpg', 'wordmark-color.png'))
+    written.append(mono_wordmark((255, 255, 255), 'wordmark-white.png'))
+    written.append(mono_wordmark((0, 0, 0), 'wordmark-black.png'))
 
     mascot = load_src('mascot-red.jpg')
     p = os.path.join(OUT_DIR, 'demo-cover.jpg')

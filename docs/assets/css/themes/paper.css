@@ -24,13 +24,13 @@
   --font-display: "Space Grotesk", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   --title-transform: none;
   --title-weight: 700;
-  --logo-width: 64px;
+  --logo-width: 150px;
   --logo-width-store: 220px;
-  --logo-ratio: 2 / 3;
+  --logo-ratio: 12 / 5;
 }
 
 .brand__logo {
-  background-image: url("../../img/logo-black.png");
+  background-image: url("../../img/wordmark-black.png");
 }
 
 .album__cover {
@@ -40,3 +40,7 @@
 .album__title {
   letter-spacing: -0.01em;
 }
+
+/* Store view shows the full mascot logo; album view the compact wordmark. */
+.view-store { --logo-ratio: 2 / 3; }
+.view-store .brand__logo { background-image: url("../../img/logo-black.png"); }
