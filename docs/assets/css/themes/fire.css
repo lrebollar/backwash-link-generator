@@ -26,7 +26,7 @@
   --title-weight: 400;
   --logo-width: 170px;
   --logo-width-store: 280px;
-  --logo-ratio: 27 / 10;
+  --logo-ratio: 12 / 5;
 }
 
 .brand__logo { background-image: url("../../img/wordmark-color.png"); }

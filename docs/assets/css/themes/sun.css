@@ -26,7 +26,7 @@
   --title-weight: 400;
   --logo-width: 96px;
   --logo-width-store: 260px;
-  --logo-ratio: 3 / 4;
+  --logo-ratio: 2 / 3;
 }
 
 .brand__logo { background-image: url("../../img/logo-color.png"); }
