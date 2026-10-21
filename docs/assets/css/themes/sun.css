@@ -1,0 +1,48 @@
+/* Theme "Sun": brand yellow page, black pill rows with white text, red Play pills.
+   Heavy grotesk type, high contrast, no shadows. */
+@import url("https://fonts.googleapis.com/css2?family=Archivo+Black&family=Archivo:wght@500;600;700&display=swap");
+
+:root {
+  --bg: #FEE800;
+  --fg: #000000;
+  --muted: #4a4300;
+  --accent: #F41100;
+  --accent-fg: #ffffff;
+  --surface: #000000;
+  --surface-fg: #ffffff;
+  --surface-hover: #1f1f1f;
+  --border: #000000;
+  --border-width: 2px;
+  --radius: 999px;
+  --cover-radius: 18px;
+  --shadow: none;
+  --cta-bg: #F41100;
+  --cta-fg: #ffffff;
+  --cta-border: #F41100;
+  --icon-color: #FEE800;
+  --font-body: "Archivo", system-ui, sans-serif;
+  --font-display: "Archivo Black", "Archivo", sans-serif;
+  --title-transform: none;
+  --title-weight: 400;
+  --logo-width: 160px;
+  --logo-width-store: 260px;
+  --logo-ratio: 12 / 5;
+}
+
+.brand__logo { background-image: url("../../img/wordmark-color.png"); }
+
+.album__cover { border: 3px solid #000; box-shadow: none; }
+.album__title { letter-spacing: -0.02em; }
+.album__artist { color: #000; font-weight: 700; }
+
+.link { padding-left: 20px; }
+
+.btn--primary { border: 2px solid #000; }
+.btn--secondary { background: transparent; color: #000; border-color: #000; }
+
+.social { color: #000; }
+.social:hover { background: rgba(0,0,0,.08); }
+
+/* Store view shows the full mascot logo; album view the compact wordmark. */
+.view-store { --logo-ratio: 2 / 3; }
+.view-store .brand__logo { background-image: url("../../img/logo-color.png"); }

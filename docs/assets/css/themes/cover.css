@@ -1,0 +1,66 @@
+/* Theme "Cover": the page adapts to each record. The album cover becomes a heavily blurred, darkened full-screen backdrop.
+   Link rows are frosted glass. Minimal, like Apple Music's "now playing". */
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap");
+
+:root {
+  --bg: #111111;
+  --fg: #ffffff;
+  --muted: rgba(255, 255, 255, .68);
+  --accent: #ffffff;
+  --accent-fg: #111111;
+  --surface: rgba(255, 255, 255, .12);
+  --surface-fg: #ffffff;
+  --surface-hover: rgba(255, 255, 255, .2);
+  --border: rgba(255, 255, 255, .16);
+  --border-width: 1px;
+  --radius: 16px;
+  --cover-radius: 14px;
+  --shadow: none;
+  --cta-bg: #ffffff;
+  --cta-fg: #111111;
+  --cta-border: #ffffff;
+  --icon-color: #ffffff;
+  --font-body: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-display: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --title-transform: none;
+  --title-weight: 800;
+  --logo-width: 140px;
+  --logo-width-store: 220px;
+  --logo-ratio: 12 / 5;
+}
+
+body { background: #111; }
+
+.page { background: transparent; }
+
+.brand__logo {
+  background-image: url("../../img/wordmark-white.png");
+  opacity: .9;
+}
+
+/* scale() hides the blurred edges */
+.backdrop {
+  display: block;
+  background-color: #111;
+  filter: blur(48px) saturate(1.5) brightness(.5);
+  transform: scale(1.25);
+}
+
+/* store view or album without cover: fall back to the demo cover */
+.backdrop:not([style*="url"]) {
+  background-image: url("../../img/demo-cover.jpg");
+}
+
+.link,
+.btn--secondary {
+  -webkit-backdrop-filter: blur(14px);
+  backdrop-filter: blur(14px);
+}
+
+.album__cover { box-shadow: 0 30px 60px rgba(0, 0, 0, .5); }
+
+.album__title { letter-spacing: -0.02em; }
+
+/* Store view shows the full mascot logo; album view the compact wordmark. */
+.view-store { --logo-ratio: 2 / 3; }
+.view-store .brand__logo { background-image: url("../../img/logo-white.png"); }

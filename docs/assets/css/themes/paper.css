@@ -1,0 +1,46 @@
+/* Theme "Paper": calm, minimalist, warm off-white like a record sleeve insert.
+   Black ink on cream stock, white surfaces, hairline borders, no decoration. */
+@import url("https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap");
+
+:root {
+  --bg: #f4f1ea;
+  --fg: #141414;
+  --muted: #6d6a63;
+  --accent: #141414;
+  --accent-fg: #f4f1ea;
+  --surface: #ffffff;
+  --surface-fg: #141414;
+  --surface-hover: #faf8f4;
+  --border: #e3ded3;
+  --border-width: 1px;
+  --radius: 12px;
+  --cover-radius: 6px;
+  --shadow: 0 1px 2px rgba(20,20,20,.05);
+  --cta-bg: #141414;
+  --cta-fg: #ffffff;
+  --cta-border: #141414;
+  --icon-color: #141414;
+  --font-body: "Space Grotesk", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-display: "Space Grotesk", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --title-transform: none;
+  --title-weight: 700;
+  --logo-width: 150px;
+  --logo-width-store: 220px;
+  --logo-ratio: 12 / 5;
+}
+
+.brand__logo {
+  background-image: url("../../img/wordmark-black.png");
+}
+
+.album__cover {
+  box-shadow: 0 12px 30px rgba(20,20,20,.18);
+}
+
+.album__title {
+  letter-spacing: -0.01em;
+}
+
+/* Store view shows the full mascot logo; album view the compact wordmark. */
+.view-store { --logo-ratio: 2 / 3; }
+.view-store .brand__logo { background-image: url("../../img/logo-black.png"); }

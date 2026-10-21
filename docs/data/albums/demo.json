@@ -1,0 +1,22 @@
+{
+  "slug": "demo",
+  "title": "Backwash Sampler Vol. 1",
+  "artist": "Various Artists",
+  "year": "2026",
+  "label": "Backwash Records",
+  "note": "Demo record — delete me",
+  "cover": "assets/img/demo-cover.jpg",
+  "shopUrl": "https://example.com/catalog/demo",
+  "links": {
+    "spotify": "https://open.spotify.com/search/backwash%20records",
+    "appleMusic": "https://music.apple.com/us/search?term=backwash%20records",
+    "youtubeMusic": "https://music.youtube.com/search?q=backwash%20records",
+    "youtube": "",
+    "amazonMusic": "",
+    "deezer": "https://www.deezer.com/search/backwash%20records",
+    "tidal": "https://listen.tidal.com/search?q=backwash%20records",
+    "soundcloud": "",
+    "bandcamp": "https://bandcamp.com/search?q=backwash%20records"
+  },
+  "updatedAt": "2026-10-21T19:18:26.000Z"
+}

@@ -1,0 +1,44 @@
+/* Theme "Fire": the brand sticker look - flat red page, yellow link rows with thick black outlines.
+   Hard black offset shadows and a bold condensed uppercase title. No gradients, no textures. */
+@import url("https://fonts.googleapis.com/css2?family=Anton&family=Archivo:wght@500;700;800&display=swap");
+
+:root {
+  --bg: #F41100;
+  --fg: #000000;
+  --muted: #2a0400;
+  --accent: #000000;
+  --accent-fg: #FEE800;
+  --surface: #FEE800;
+  --surface-fg: #000000;
+  --surface-hover: #fff36b;
+  --border: #000000;
+  --border-width: 3px;
+  --radius: 14px;
+  --cover-radius: 14px;
+  --shadow: 4px 4px 0 #000000;
+  --cta-bg: #000000;
+  --cta-fg: #FEE800;
+  --cta-border: #000000;
+  --icon-color: #000000;
+  --font-body: "Archivo", system-ui, sans-serif;
+  --font-display: "Anton", "Archivo", Impact, sans-serif;
+  --title-transform: uppercase;
+  --title-weight: 400;
+  --logo-width: 170px;
+  --logo-width-store: 280px;
+  --logo-ratio: 12 / 5;
+}
+
+.brand__logo { background-image: url("../../img/wordmark-color.png"); }
+.view-store { --logo-ratio: 3 / 4; }
+.view-store .brand__logo { background-image: url("../../img/mark-color.png"); }
+
+.album__cover { border: 3px solid #000; box-shadow: 6px 6px 0 #000; }
+.album__title { font-size: clamp(1.9rem, 9vw, 2.6rem); letter-spacing: .01em; color: #FEE800; text-shadow: 3px 3px 0 #000; -webkit-text-stroke: 1.5px #000; paint-order: stroke fill; }
+.album__artist { color: #000; font-weight: 800; text-transform: uppercase; letter-spacing: .06em; }
+.section-title { color: #000; }
+.link:hover, .btn:hover { box-shadow: 6px 6px 0 #000; transform: translate(-2px,-2px); }
+.link:active, .btn:active { box-shadow: 1px 1px 0 #000; transform: translate(3px,3px); }
+.social { color: #000; }
+.album__note { background: #000; color: #FEE800; border-color: #000; }
+.notice { background: #FEE800; border-style: solid; }

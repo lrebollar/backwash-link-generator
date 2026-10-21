@@ -1,0 +1,25 @@
+{
+  "name": "Backwash Records",
+  "tagline": "Record store",
+  "theme": "ink",
+  "catalogUrl": "https://example.com/catalog",
+  "socials": {
+    "instagram": "https://www.instagram.com/",
+    "facebook": "https://www.facebook.com/",
+    "tiktok": "https://www.tiktok.com/",
+    "x": "",
+    "youtube": "",
+    "whatsapp": "",
+    "email": "hello@example.com",
+    "maps": "",
+    "website": ""
+  },
+  "texts": {
+    "listen": "Listen on",
+    "play": "Play",
+    "shop": "Buy this record",
+    "catalog": "Browse our catalog",
+    "follow": "Follow us",
+    "notFound": "We couldn't find that record."
+  }
+}
