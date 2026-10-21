@@ -42,8 +42,8 @@ Your site address: `https://jadm333.github.io/backwash-link-generator/`
 **Option B: Cloudflare Pages (keeps the repository private)**
 
 1. Create a free account at dash.cloudflare.com.
-2. Click **Workers & Pages**. Click **Create**. Click **Pages**.
-3. Click **Connect to Git**. Authorize GitHub. Pick this repository.
+2. Click **Workers & Pages**. Click **Create**. Choose the **Pages** option (it may be a small link such as "Looking to deploy Pages? Get started").
+3. Choose **Import an existing Git repository** (or **Connect to Git**). Authorize GitHub. Pick this repository.
 4. Set **Production branch** to `main`.
 5. Set **Framework preset** to **None**.
 6. Leave **Build command** empty.
@@ -51,6 +51,8 @@ Your site address: `https://jadm333.github.io/backwash-link-generator/`
 8. Click **Save and Deploy**.
 
 Your site address: `https://<project-name>.pages.dev/`. Replace `<project-name>` with the name of your project.
+
+Each save in the admin panel starts a new Cloudflare deploy. The free plan allows 500 deploys a month, which is plenty.
 
 ### Step 2: Create a GitHub access token
 
@@ -108,7 +110,7 @@ Do this for each record. It takes about 5 minutes per record.
 
 ### Part 2: Write the sticker
 
-Open the Sticker panel for this record. Turn on NFC in your phone settings first.
+The Sticker panel opens by itself after you save. For an older record, tap **Albums**, then **Sticker** next to it. Turn on NFC in your phone settings first.
 
 **Android phone with Chrome:**
 
