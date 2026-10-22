@@ -2,6 +2,7 @@
   "name": "Backwash Records",
   "tagline": "Record store",
   "theme": "ink",
+  "themeSwitcher": true,
   "catalogUrl": "https://example.com/catalog",
   "socials": {
     "instagram": "https://www.instagram.com/",

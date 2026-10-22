@@ -2,11 +2,12 @@
 // (?a=<slug>, or #preview=<base64url JSON> from the admin panel).
 // Only trusted strings (ICONS) go through innerHTML; all data uses textContent / attributes.
 
-import { PLATFORMS, SOCIALS, THEMES, DEFAULT_TEXTS, SLUG_RE } from './platforms.js';
+import { PLATFORMS, SOCIALS, THEMES, THEME_STORAGE_KEY, DEFAULT_TEXTS, SLUG_RE } from './platforms.js';
 
 const DEFAULT_NAME = 'Backwash Records';
 const DEFAULT_THEME = 'ink';
 const THEME_WAIT_MS = 3000;
+const THEME_LINK_ID = 'theme-css';
 const THEME_KEYS = THEMES.map((t) => t.key);
 const CONTROL_CHARS = /[\u0000-\u001f\u007f]/;
 const SCHEME_RE = /^[a-z][a-z0-9+.-]*:/i;
@@ -109,10 +110,15 @@ function readPreview() {
   }
 }
 
-function pickTheme(param, siteTheme) {
+function siteDefaultTheme(siteTheme) {
+  return THEME_KEYS.includes(siteTheme) ? siteTheme : DEFAULT_THEME;
+}
+
+// Precedence: valid ?theme= > stored pick (only when the switcher is on) > site.theme > 'ink'.
+function pickTheme(param, stored, siteTheme) {
   if (THEME_KEYS.includes(param)) return param;
-  if (THEME_KEYS.includes(siteTheme)) return siteTheme;
-  return DEFAULT_THEME;
+  if (THEME_KEYS.includes(stored)) return stored;
+  return siteDefaultTheme(siteTheme);
 }
 
 function textsFrom(custom) {
@@ -128,12 +134,17 @@ function textsFrom(custom) {
 
 // ---------- theme ----------
 
-// Resolves when the stylesheet loads or fails, or after THEME_WAIT_MS.
-function loadTheme(theme) {
+function themeLink(key) {
+  const link = document.createElement('link');
+  link.rel = 'stylesheet';
+  link.href = `assets/css/themes/${key}.css`;
+  return link;
+}
+
+// Boot only: resolves when the stylesheet loads or fails, or after THEME_WAIT_MS,
+// so a slow file cannot hold up the page (there is no old sheet to keep at boot).
+function waitForStylesheet(link) {
   return new Promise((resolve) => {
-    const link = document.createElement('link');
-    link.rel = 'stylesheet';
-    link.href = `assets/css/themes/${theme}.css`;
     const finish = () => {
       clearTimeout(timer);
       resolve();
@@ -141,8 +152,34 @@ function loadTheme(theme) {
     const timer = setTimeout(finish, THEME_WAIT_MS);
     link.addEventListener('load', finish, { once: true });
     link.addEventListener('error', finish, { once: true });
-    document.head.append(link);
   });
+}
+
+// Switching: settles when the stylesheet loads or errors. No timer, so the old sheet
+// stays on screen until the new one has actually arrived.
+function stylesheetSettled(link) {
+  return new Promise((resolve) => {
+    link.addEventListener('load', () => resolve(), { once: true });
+    link.addEventListener('error', () => resolve(), { once: true });
+  });
+}
+
+// A file that did not arrive leaves no rules. A sheet that has rules still works after an
+// error, e.g. when an optional web-font @import was blocked, so the error alone does not decide.
+function sheetHasRules(link) {
+  try {
+    return link.sheet !== null && link.sheet.cssRules.length > 0;
+  } catch {
+    return false;
+  }
+}
+
+async function loadTheme(key) {
+  const link = themeLink(key);
+  link.id = THEME_LINK_ID;
+  const loaded = waitForStylesheet(link);
+  document.head.append(link);
+  await loaded;
 }
 
 function syncThemeColor() {
@@ -155,6 +192,184 @@ function syncThemeColor() {
     document.head.append(meta);
   }
   meta.content = bg;
+}
+
+let activeTheme = null;
+// Bumped on every switch, so a slow stylesheet cannot overwrite a newer pick.
+let themeRequest = 0;
+
+// Swaps the theme without a reload. The new stylesheet is added beside the old one, and the
+// switch is committed only after it has loaded, so the page keeps its look while it downloads.
+// Resolves true when the new design is on screen; false when it failed or a newer pick replaced it.
+async function switchTheme(key) {
+  if (!THEME_KEYS.includes(key)) return false;
+  const request = ++themeRequest;
+  if (key === activeTheme) return true;
+  const current = document.getElementById(THEME_LINK_ID);
+  const link = themeLink(key);
+  const settled = stylesheetSettled(link);
+  if (current) current.after(link);
+  else document.head.append(link);
+  await settled;
+  if (request !== themeRequest) {
+    // A newer pick took over while this one was downloading.
+    link.remove();
+    return false;
+  }
+  if (!sheetHasRules(link)) {
+    // The theme file did not arrive: keep the current design.
+    link.remove();
+    console.warn(`Theme "${key}" could not be loaded; keeping the current design`);
+    return false;
+  }
+  if (current) current.remove();
+  link.id = THEME_LINK_ID;
+  activeTheme = key;
+  document.body.classList.remove(...THEME_KEYS.map((k) => `theme-${k}`));
+  document.body.classList.add(`theme-${key}`);
+  syncThemeColor();
+  return true;
+}
+
+// localStorage can throw (private mode, blocked site data), so every access is guarded.
+function storedTheme() {
+  try {
+    const key = localStorage.getItem(THEME_STORAGE_KEY);
+    return THEME_KEYS.includes(key) ? key : null;
+  } catch {
+    return null;
+  }
+}
+
+function saveTheme(key) {
+  try {
+    if (key) localStorage.setItem(THEME_STORAGE_KEY, key);
+    else localStorage.removeItem(THEME_STORAGE_KEY);
+  } catch {
+    // Not saved: the pick still applies for this page view.
+  }
+}
+
+// Drops ?theme= so the URL no longer overrides the pick. The hash stays.
+function dropThemeParam() {
+  try {
+    const url = new URL(location.href);
+    if (!url.searchParams.has('theme')) return;
+    url.searchParams.delete('theme');
+    history.replaceState(history.state, '', url);
+  } catch {
+    // Some sandboxed contexts refuse replaceState; the stale param is harmless.
+  }
+}
+
+// ---------- design switcher ----------
+
+// Floating "Change design" button. Only rendered when site.themeSwitcher is true and not in an iframe.
+function renderThemeSwitcher(defaultTheme, icons) {
+  const wrap = h('div', 'theme-switcher');
+  // The popover panel holds the title and hint; only the inner list is the ARIA menu.
+  // tabindex=-1 keeps focus inside the panel when its title or hint is clicked.
+  const menu = h('div', 'theme-switcher__menu');
+  menu.id = 'theme-menu';
+  menu.tabIndex = -1;
+  menu.hidden = true;
+  const list = h('div', 'theme-switcher__list');
+  list.setAttribute('role', 'menu');
+  list.setAttribute('aria-label', 'Design');
+
+  const designItems = THEMES.map((theme) => {
+    const item = h('button', null, theme.name);
+    item.setAttribute('type', 'button');
+    item.setAttribute('role', 'menuitemradio');
+    item.dataset.theme = theme.key;
+    return item;
+  });
+  const separator = h('div', 'theme-switcher__sep');
+  separator.setAttribute('role', 'separator');
+  const defaultItem = h('button', null, 'Use store default');
+  defaultItem.setAttribute('type', 'button');
+  defaultItem.setAttribute('role', 'menuitem');
+  defaultItem.dataset.theme = '';
+  list.append(...designItems, separator, defaultItem);
+  menu.append(
+    h('p', 'theme-switcher__title', 'Design'),
+    list,
+    h('p', 'theme-switcher__hint', 'Saved on this device.'),
+  );
+
+  const toggle = h('button', 'theme-switcher__toggle');
+  toggle.setAttribute('type', 'button');
+  toggle.setAttribute('aria-label', 'Change design');
+  toggle.setAttribute('aria-haspopup', 'true');
+  toggle.setAttribute('aria-expanded', 'false');
+  toggle.setAttribute('aria-controls', 'theme-menu');
+  setIcon(toggle, 'palette', icons);
+
+  wrap.append(menu, toggle);
+  document.body.append(wrap);
+  document.body.classList.add('has-theme-switcher');
+
+  const isOpen = () => !menu.hidden;
+
+  const markChecked = (key) => {
+    for (const item of designItems) item.setAttribute('aria-checked', String(item.dataset.theme === key));
+  };
+  markChecked(activeTheme);
+
+  function openMenu() {
+    menu.hidden = false;
+    toggle.setAttribute('aria-expanded', 'true');
+    const checked = designItems.find((item) => item.getAttribute('aria-checked') === 'true');
+    (checked ?? designItems[0]).focus();
+  }
+
+  function closeMenu({ returnFocus = false } = {}) {
+    if (!isOpen()) return;
+    menu.hidden = true;
+    toggle.setAttribute('aria-expanded', 'false');
+    if (returnFocus) toggle.focus();
+  }
+
+  // key '' means "Use store default". The pick is saved only once it is actually on screen.
+  async function choose(key) {
+    const target = key || defaultTheme;
+    closeMenu({ returnFocus: true });
+    if (await switchTheme(target)) {
+      saveTheme(key);
+      markChecked(target);
+      dropThemeParam();
+    }
+  }
+
+  toggle.addEventListener('click', () => (isOpen() ? closeMenu() : openMenu()));
+  menu.addEventListener('click', (event) => {
+    const item = event.target.closest('button[data-theme]');
+    if (item) choose(item.dataset.theme);
+  });
+
+  wrap.addEventListener('keydown', (event) => {
+    if (!isOpen() || (event.key !== 'ArrowDown' && event.key !== 'ArrowUp')) return;
+    event.preventDefault();
+    const items = [...menu.querySelectorAll('button')];
+    const at = items.indexOf(document.activeElement);
+    const step = event.key === 'ArrowDown' ? 1 : -1;
+    const next = at < 0 ? (step > 0 ? 0 : items.length - 1) : (at + step + items.length) % items.length;
+    items[next].focus();
+  });
+
+  // Focus leaving the switcher closes the menu, including tabbing past the last element
+  // (relatedTarget is null then).
+  wrap.addEventListener('focusout', (event) => {
+    if (isOpen() && !wrap.contains(event.relatedTarget)) closeMenu();
+  });
+
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && isOpen()) closeMenu({ returnFocus: true });
+  });
+
+  document.addEventListener('pointerdown', (event) => {
+    if (isOpen() && !wrap.contains(event.target)) closeMenu();
+  });
 }
 
 // ---------- markup ----------
@@ -315,7 +530,10 @@ async function boot() {
   const icons = ICONS && typeof ICONS === 'object' ? ICONS : {};
   const name = str(site.name) || DEFAULT_NAME;
   const texts = textsFrom(site.texts);
-  const theme = pickTheme(params.get('theme'), site.theme);
+  // A stored pick only counts while the switcher is on; otherwise the site is "locked" to its default.
+  const switcherOn = site.themeSwitcher === true;
+  const defaultTheme = siteDefaultTheme(site.theme);
+  const theme = pickTheme(params.get('theme'), switcherOn ? storedTheme() : null, defaultTheme);
   const album = albumData && isPlainObject(albumData) ? albumData : null;
   const notFound = !preview && Boolean(validSlug) && !album;
 
@@ -324,8 +542,10 @@ async function boot() {
   setDocumentTitle(name, album);
 
   await loadTheme(theme);
+  activeTheme = theme;
   document.body.classList.add(`theme-${theme}`, album ? 'view-album' : 'view-store');
   syncThemeColor();
+  if (switcherOn && window.self === window.top) renderThemeSwitcher(defaultTheme, icons);
   document.body.classList.remove('is-loading');
 }
 

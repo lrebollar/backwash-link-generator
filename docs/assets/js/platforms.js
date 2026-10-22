@@ -27,13 +27,17 @@ export const SOCIALS = [
   { key: 'website',   label: 'Website',   icon: 'globe' },
 ];
 
+// `name` is the short label used by the public page's "Change design" menu.
 export const THEMES = [
-  { key: 'ink',   label: 'Ink — black & white, line-art logo' },
-  { key: 'paper', label: 'Paper — off-white, black ink' },
-  { key: 'fire',  label: 'Fire — brand red & yellow, sticker style' },
-  { key: 'sun',   label: 'Sun — brand yellow, black type' },
-  { key: 'cover', label: 'Cover — blurred album art backdrop' },
+  { key: 'ink',   name: 'Ink',   label: 'Ink — black & white, line-art logo' },
+  { key: 'paper', name: 'Paper', label: 'Paper — off-white, black ink' },
+  { key: 'fire',  name: 'Fire',  label: 'Fire — brand red & yellow, sticker style' },
+  { key: 'sun',   name: 'Sun',   label: 'Sun — brand yellow, black type' },
+  { key: 'cover', name: 'Cover', label: 'Cover — blurred album art backdrop' },
 ];
+
+// localStorage key holding the design a visitor picked with the "Change design" button.
+export const THEME_STORAGE_KEY = 'bw-theme';
 
 export const DEFAULT_TEXTS = {
   listen: 'Listen on',

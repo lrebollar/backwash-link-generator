@@ -35,7 +35,7 @@ const req = createRequire(join(process.cwd(), 'package.json'));
 const KEYS = [
   'spotify', 'appleMusic', 'youtubeMusic', 'youtube', 'amazonMusic', 'deezer', 'tidal', 'soundcloud',
   'bandcamp', 'instagram', 'facebook', 'tiktok', 'x', 'whatsapp',
-  'mail', 'mapPin', 'globe', 'music', 'bag', 'disc',
+  'mail', 'mapPin', 'globe', 'music', 'bag', 'disc', 'palette',
 ];
 
 // ICONS key -> simple-icons export name.
@@ -64,6 +64,7 @@ const GENERIC = {
   music: 'music',
   bag: 'shopping-bag',
   disc: 'disc-3',
+  palette: 'palette',
 };
 
 const FALLBACK_LUCIDE = GENERIC.music;

@@ -72,7 +72,7 @@
     <input id="c-token" type="password" autocomplete="off" spellcheck="false">
     <label for="c-site">Public site URL</label>
     <input id="c-site" type="url" autocomplete="off" autocapitalize="off" spellcheck="false">
-    <p class="hint">Where the public album pages live. Must end with /.</p>
+    <p class="hint">Where the public album pages live. Filled in automatically when you open this admin from the live site (for example <code>https://backwash-link-generator-xxxxxx.gitlab.io/</code>). Must end with a slash (/).</p>
     <label for="c-country">Country for link lookup</label>
     <input id="c-country" maxlength="2" autocomplete="off" autocapitalize="characters" spellcheck="false">
     <p class="hint">Two letters, e.g. US, MX, DE.</p>
@@ -175,9 +175,11 @@
     <input id="s-name" autocomplete="off">
     <label for="s-tagline">Tagline</label>
     <input id="s-tagline" autocomplete="off">
-    <label for="s-theme">Theme</label>
+    <label for="s-theme">Default design</label>
     <select id="s-theme"></select>
-    <p class="hint"><a href="../themes.html" target="_blank" rel="noopener">Compare designs</a></p>
+    <p class="hint">What visitors see. <a href="../themes.html" target="_blank" rel="noopener">Compare all designs</a></p>
+    <label class="check"><input type="checkbox" id="s-switcher"> Show the 'Change design' button on the public pages</label>
+    <p class="hint">Use it to try the designs on your phone. Untick it to lock the site to the default design.</p>
     <label for="s-catalog">Catalog URL</label>
     <input id="s-catalog" type="url" inputmode="url" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="https://">
     <p class="hint">The online catalog of the whole store (the "Browse our catalog" button).</p>

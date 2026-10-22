@@ -536,7 +536,7 @@ async function onSaveAlbum() {
     clearCoverFile();
     refreshEditorChrome();
     updateCoverPreview();
-    const done = 'Saved ✓ — the public page updates in about 1 minute.';
+    const done = 'Saved ✓ — the public page updates in 1–3 minutes.';
     setStatus([done, ...warnings].join(' '), warnings.length ? 'err' : 'ok');
     await showSticker(album.slug, album);
   } catch (e) {
@@ -644,6 +644,7 @@ function defaultSite() {
     name: 'Backwash Records',
     tagline: 'Record store',
     theme: 'ink',
+    themeSwitcher: true,
     catalogUrl: '',
     socials: Object.fromEntries(SOCIALS.map((s) => [s.key, ''])),
     texts: {},
@@ -674,6 +675,7 @@ function fillSiteForm(site) {
   setVal('s-tagline', site.tagline);
   setVal('s-catalog', site.catalogUrl);
   $('s-theme').value = THEMES.some((t) => t.key === site.theme) ? site.theme : 'ink';
+  $('s-switcher').checked = site.themeSwitcher === true;
   for (const s of SOCIALS) setVal(`s-social-${s.key}`, site.socials?.[s.key]);
   for (const key of Object.keys(DEFAULT_TEXTS)) setVal(`s-text-${key}`, site.texts?.[key]);
 }
@@ -693,7 +695,18 @@ function readSiteForm(base) {
     const v = val(`s-text-${key}`);
     site.texts[key] = v === DEFAULT_TEXTS[key] ? '' : v;
   }
-  return site;
+  return withThemeSwitcher(site, $('s-switcher').checked);
+}
+
+// Puts themeSwitcher right after theme in site.json, also when the file did not have it yet.
+function withThemeSwitcher(site, on) {
+  const out = {};
+  for (const [key, value] of Object.entries(site)) {
+    if (key === 'themeSwitcher') continue;
+    out[key] = value;
+    if (key === 'theme') out.themeSwitcher = on;
+  }
+  return out;
 }
 
 function validateSite(site) {
@@ -728,7 +741,7 @@ async function onSaveSite() {
       state.siteFile.sha,
     );
     state.siteFile = { sha: res.sha, data: site };
-    setMsg('s-msg', 'Saved ✓ — the public site updates in about 1 minute.', 'ok');
+    setMsg('s-msg', 'Saved ✓ — the public site updates in 1–3 minutes.', 'ok');
   } catch (e) {
     setMsg('s-msg', errorText(e), 'err');
   } finally {
