@@ -6,7 +6,7 @@
   "label": "Backwash Records",
   "note": "Demo record — delete me",
   "cover": "assets/img/demo-cover.jpg",
-  "shopUrl": "https://example.com/catalog/demo",
+  "shopUrl": "",
   "links": {
     "spotify": "https://open.spotify.com/search/backwash%20records",
     "appleMusic": "https://music.apple.com/us/search?term=backwash%20records",
