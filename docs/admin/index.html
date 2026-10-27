@@ -25,6 +25,7 @@
   input, select { display: block; width: 100%; margin-top: 4px; padding: 10px; font: inherit; font-size: 16px; border: 1px solid #888; border-radius: 8px; background: #fff; color: #111; }
   input[type="checkbox"] { display: inline-block; width: auto; margin: 0 8px 0 0; }
   input[readonly] { background: #eee; }
+  textarea { display: block; width: 100%; margin-top: 6px; padding: 10px; font: 14px/1.4 ui-monospace, Menlo, Consolas, monospace; border: 1px solid #888; border-radius: 8px; background: #eee; color: #111; overflow-wrap: anywhere; resize: vertical; }
   .check { display: flex; align-items: center; font-weight: 400; margin-top: 12px; }
   .hint { font-size: .88rem; color: #555; margin: 4px 0 0; }
   [data-kind="ok"] { color: #0a6b2b; }
@@ -54,22 +55,12 @@
   <section id="view-connection" hidden>
     <h2>Connection</h2>
     <div class="box">
-      <p><strong>Create a token:</strong> GitHub → Settings → Developer settings → Personal access tokens → Fine-grained tokens → Generate new token.</p>
-      <p>Repository access: <em>Only select repositories</em> → this repository.<br>
-      Permissions → Repository permissions → <em>Contents</em> = <strong>Read and write</strong>.</p>
-      <p><strong>The token is stored only in this browser</strong> (localStorage). On a shared computer, use "Forget token" when you are done.</p>
+      <p>The web app URL comes from Google Apps Script → Deploy → Manage deployments. The password is the ADMIN_PASSWORD script property. Both are stored only in this browser.</p>
     </div>
-    <label for="c-owner">GitHub owner</label>
-    <input id="c-owner" autocomplete="off" autocapitalize="off" spellcheck="false">
-    <label for="c-repo">Repository</label>
-    <input id="c-repo" autocomplete="off" autocapitalize="off" spellcheck="false">
-    <label for="c-branch">Branch</label>
-    <input id="c-branch" autocomplete="off" autocapitalize="off" spellcheck="false">
-    <label for="c-dir">Site folder in the repository</label>
-    <input id="c-dir" autocomplete="off" autocapitalize="off" spellcheck="false">
-    <p class="hint">The folder that contains the public index.html (usually docs).</p>
-    <label for="c-token">GitHub token</label>
-    <input id="c-token" type="password" autocomplete="off" spellcheck="false">
+    <label for="c-url">Apps Script web app URL</label>
+    <input id="c-url" type="url" inputmode="url" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="https://script.google.com/macros/s/…/exec">
+    <label for="c-password">Admin password</label>
+    <input id="c-password" type="password" autocomplete="current-password" spellcheck="false">
     <label for="c-site">Public site URL</label>
     <input id="c-site" type="url" autocomplete="off" autocapitalize="off" spellcheck="false">
     <p class="hint">Where the public album pages live. Filled in automatically when you open this admin from the live site (for example <code>https://backwash-link-generator-xxxxxx.gitlab.io/</code>). Must end with a slash (/).</p>
@@ -78,9 +69,14 @@
     <p class="hint">Two letters, e.g. US, MX, DE.</p>
     <p>
       <button type="button" id="c-save" class="primary">Save &amp; test</button>
-      <button type="button" id="c-forget" class="danger">Forget token</button>
+      <button type="button" id="c-forget" class="danger">Forget password</button>
     </p>
     <p id="c-result" role="status"></p>
+    <div id="c-config" class="box" hidden>
+      <p data-kind="warn">The public pages don't know this sheet yet. Put this in docs/config.json on GitHub:</p>
+      <textarea id="c-config-json" readonly rows="7" spellcheck="false" aria-label="Content for docs/config.json"></textarea>
+      <p><button type="button" id="c-config-copy">Copy</button></p>
+    </div>
   </section>
 
   <!-- Album list -->
@@ -122,11 +118,10 @@
     <p id="a-slug-hint" class="hint"></p>
 
     <label for="a-cover">Cover image URL</label>
-    <input id="a-cover" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="https://… or data/covers/…">
+    <input id="a-cover" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="https://…">
     <label for="a-cover-file">…or upload a cover</label>
     <input id="a-cover-file" type="file" accept="image/*">
     <p class="hint">An uploaded file replaces the cover when you save.</p>
-    <label class="check"><input type="checkbox" id="a-cover-copy" checked> Save a copy of the cover in the repo (recommended)</label>
     <img id="a-cover-preview" alt="Cover preview" hidden>
     <p id="a-cover-msg" class="hint" role="status"></p>
 
@@ -143,7 +138,7 @@
       <button type="button" id="a-preview">Preview</button>
       <button type="button" id="a-delete" class="danger" hidden>Delete album</button>
     </div>
-    <p class="hint">Preview works before the site is redeployed (uploaded cover files show after saving).</p>
+    <p class="hint">Preview opens the public page with these values, without saving. Uploaded covers show after saving.</p>
     <p id="a-msg" role="status"></p>
   </section>
 

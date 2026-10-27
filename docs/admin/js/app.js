@@ -1,23 +1,16 @@
 // Backwash Records admin panel. Plain ES module, no build step.
-// Writes album/site JSON to the repo through the GitHub Contents API.
+// Reads and writes albums and site settings through the Apps Script web app (api.js).
 
-import { GitHubClient } from './github.js';
+import { SheetApi, loadConfig } from './api.js';
 import { lookup } from './odesli.js';
 import { toJpegBase64 } from './cover.js';
 import { renderQR, qrPngDataUrl, nfcSupported, writeNfc, ntagHint } from './share.js';
 import { PLATFORMS, SOCIALS, THEMES, DEFAULT_TEXTS, SLUG_RE, slugify } from '../../assets/js/platforms.js';
 
-const SETTINGS_KEY = 'bw-admin-settings';
+const SETTINGS_KEY = 'bw-admin-sheet';
+const OLD_SETTINGS_KEY = 'bw-admin-settings';
 const DEFAULT_SITE_URL = new URL('../', location.href).href;
-const DEFAULT_SETTINGS = {
-  owner: 'jadm333',
-  repo: 'backwash-link-generator',
-  branch: 'main',
-  dir: 'docs',
-  token: '',
-  siteUrl: DEFAULT_SITE_URL,
-  country: 'US',
-};
+const SAVED_MSG = 'Saved ✓ — the public page shows it within a minute.';
 const VIEWS = ['connection', 'albums', 'editor', 'sticker', 'site'];
 const TAB_OF_VIEW = { connection: 'connection', albums: 'albums', editor: 'albums', sticker: 'albums', site: 'site' };
 const TEXT_LABELS = {
@@ -31,10 +24,10 @@ const TEXT_LABELS = {
 const NFC_TOOLS_HINT = "Writing NFC from the browser only works in Chrome on Android. On iPhone (or any phone) use the free app 'NFC Tools': Write → Add a record → URL/URI → paste the link → Write → hold the sticker.";
 
 const state = {
-  settings: loadSettings(),
-  albums: [],        // [{ slug, album, sha, error? }]
-  editor: null,      // { isNew, slug, sha }
-  siteFile: null,    // { sha, data }
+  config: { sheetId: '', appsScriptUrl: '' }, // from docs/config.json
+  settings: null,    // { url, password, siteUrl, country }, saved in this browser
+  albums: [],        // album objects from listAlbums
+  editor: null,      // { isNew, slug, expectedUpdatedAt }
   coverObjectUrl: '',
   statusTimer: 0,
 };
@@ -46,6 +39,11 @@ const val = (id) => $(id).value.trim();
 const setVal = (id, value) => { $(id).value = value ?? ''; };
 const errorText = (e) => (e && e.message) || String(e);
 const isHttpUrl = (s) => /^https?:\/\/\S+$/i.test(s);
+// Accepts the bare sheet ID or a full sheet URL, like the public pages do.
+const sheetIdOf = (raw) => {
+  const text = String(raw || '').trim();
+  return text.match(/\/d\/([a-zA-Z0-9_-]{20,})/)?.[1] || text;
+};
 
 // DOM builder: never parses strings as HTML.
 function h(tag, props = {}, ...children) {
@@ -105,6 +103,19 @@ function toBase64Url(text) {
   return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 
+// Copies an input's value; selects it when the Clipboard API is blocked.
+async function copyFrom(el) {
+  try {
+    await navigator.clipboard.writeText(el.value);
+    return true;
+  } catch {
+    el.focus();
+    el.select();
+    el.setSelectionRange(0, el.value.length);
+    return document.execCommand('copy');
+  }
+}
+
 /* ---------- settings ---------- */
 
 function normalizeSiteUrl(raw) {
@@ -122,14 +133,22 @@ function normalizeSiteUrl(raw) {
   return url.href;
 }
 
-function loadSettings() {
+// Only the keys of SETTINGS_KEY are read. Settings saved by the old repo-based admin held an access
+// token, so they are deleted. The web app URL falls back to docs/config.json when nothing is saved yet.
+function loadSettings(config) {
   let saved = {};
   try {
+    localStorage.removeItem(OLD_SETTINGS_KEY);
     saved = JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}') || {};
   } catch {
     saved = {};
   }
-  const settings = { ...DEFAULT_SETTINGS, ...saved };
+  const settings = {
+    url: String(saved.url || config.appsScriptUrl || ''),
+    password: String(saved.password || ''),
+    siteUrl: String(saved.siteUrl || ''),
+    country: String(saved.country || 'US'),
+  };
   try {
     settings.siteUrl = normalizeSiteUrl(settings.siteUrl);
   } catch {
@@ -148,25 +167,14 @@ function persistSettings() {
 }
 
 function isConfigured() {
-  const s = state.settings;
-  return Boolean(s.owner && s.repo && s.branch && s.token);
+  return Boolean(state.settings.url && state.settings.password);
 }
 
 function makeClient() {
-  if (!isConfigured()) throw new Error('Connect to GitHub first (Connection tab).');
-  const { owner, repo, branch, token } = state.settings;
-  return new GitHubClient({ owner, repo, branch, token });
+  if (!isConfigured()) throw new Error('Connect to the Google Sheet first (Connection tab).');
+  return new SheetApi({ url: state.settings.url, password: state.settings.password });
 }
 
-function repoPath(...parts) {
-  const dir = String(state.settings.dir || '').replace(/^\/+|\/+$/g, '');
-  return [dir, ...parts].filter(Boolean).join('/');
-}
-
-const albumsDirPath = () => repoPath('data/albums');
-const albumPath = (slug) => repoPath('data/albums', `${slug}.json`);
-const coverPath = (slug) => repoPath('data/covers', `${slug}.jpg`);
-const siteJsonPath = () => repoPath('data/site.json');
 const siteBase = () => state.settings.siteUrl;
 
 /* ---------- views ---------- */
@@ -179,11 +187,11 @@ function showView(name) {
   window.scrollTo(0, 0);
 }
 
-// Sends the user to the Connection tab when no token is saved yet.
+// Sends the user to the Connection tab when no password is saved yet.
 function requireConfig() {
   if (isConfigured()) return true;
   showView('connection');
-  setStatus('Connect to GitHub first: paste a token and press "Save & test".', 'err');
+  setStatus('Connect first: enter the web app URL and admin password, then press "Save & test".', 'err');
   return false;
 }
 
@@ -191,29 +199,38 @@ function requireConfig() {
 
 function fillConnectionForm() {
   const s = state.settings;
-  setVal('c-owner', s.owner);
-  setVal('c-repo', s.repo);
-  setVal('c-branch', s.branch);
-  setVal('c-dir', s.dir);
-  setVal('c-token', s.token);
+  setVal('c-url', s.url);
+  setVal('c-password', s.password);
   setVal('c-site', s.siteUrl);
   setVal('c-country', s.country);
 }
 
 function readConnectionForm() {
   const next = {
-    owner: val('c-owner'),
-    repo: val('c-repo'),
-    branch: val('c-branch'),
-    dir: val('c-dir').replace(/^\/+|\/+$/g, ''),
-    token: val('c-token'),
+    url: val('c-url'),
+    password: $('c-password').value,
     siteUrl: normalizeSiteUrl(val('c-site')),
     country: val('c-country').toUpperCase() || 'US',
   };
-  if (!next.owner || !next.repo || !next.branch) throw new Error('Owner, repository and branch are required.');
-  if (!next.token) throw new Error('Paste a GitHub token first.');
+  if (!next.url) throw new Error('Paste the Apps Script web app URL first.');
+  if (!/^https:\/\//i.test(next.url)) throw new Error('The web app URL must start with https://');
+  if (!next.password.trim()) throw new Error('Type the admin password first.');
   if (!/^[A-Z]{2}$/.test(next.country)) throw new Error('Country must be a 2-letter code, e.g. US.');
   return next;
+}
+
+// The public pages read docs/config.json; warn when it does not point at this sheet yet.
+function showSheetCheck(ping) {
+  if (sheetIdOf(state.config.sheetId) === ping.spreadsheetId) {
+    $('c-config').hidden = true;
+    return;
+  }
+  setVal('c-config-json', JSON.stringify({ sheetId: ping.spreadsheetId, appsScriptUrl: state.settings.url }, null, 2));
+  $('c-config').hidden = false;
+}
+
+function hideSheetCheck() {
+  $('c-config').hidden = true;
 }
 
 async function onSaveConnection() {
@@ -230,24 +247,32 @@ async function onSaveConnection() {
   const btn = $('c-save');
   setBusy(btn, 'Testing…');
   try {
-    const res = await makeClient().testConnection();
-    const line = `✓ Connected to ${res.repoFullName} — can push: ${res.canPush ? 'yes' : 'no'}`;
-    setMsg('c-result', res.canPush ? line : `${line}. Saving will fail: give the token Contents = Read and write on this repository.`, res.canPush ? 'ok' : 'err');
+    const res = await makeClient().ping();
+    const n = res.albums;
+    setMsg('c-result', `✓ Connected to ${res.spreadsheetName} (${n} album${n === 1 ? '' : 's'})`, 'ok');
     setStatus(remembered ? 'Connection saved.' : 'Connected, but this browser would not remember the settings.', remembered ? 'ok' : 'err');
+    showSheetCheck(res);
   } catch (e) {
     setMsg('c-result', errorText(e), 'err');
+    hideSheetCheck();
   } finally {
     setBusy(btn, '');
   }
 }
 
-function onForgetToken() {
-  state.settings = { ...state.settings, token: '' };
+function onForgetPassword() {
+  state.settings = { ...state.settings, password: '' };
   state.albums = [];
-  setVal('c-token', '');
+  setVal('c-password', '');
   persistSettings();
-  setMsg('c-result', 'Token forgotten on this browser.', 'ok');
-  setStatus('Token forgotten. Paste a new one to reconnect.', 'info');
+  hideSheetCheck();
+  setMsg('c-result', 'Password forgotten on this browser.', 'ok');
+  setStatus('Password forgotten. Type it again to reconnect.', 'info');
+}
+
+async function onCopyConfig() {
+  const ok = await copyFrom($('c-config-json'));
+  setStatus(ok ? 'Copied.' : 'Copy failed — select the text and copy it by hand.', ok ? 'ok' : 'err');
 }
 
 /* ---------- album list ---------- */
@@ -262,10 +287,7 @@ async function loadAlbums() {
   setMsg('l-status', 'Loading…');
   $('l-list').replaceChildren();
   try {
-    const client = makeClient();
-    const entries = await client.listDir(albumsDirPath());
-    const files = entries.filter((e) => e.type === 'file' && e.name.endsWith('.json'));
-    state.albums = await Promise.all(files.map((e) => readAlbumEntry(client, e)));
+    state.albums = await makeClient().listAlbums();
     const n = state.albums.length;
     setMsg('l-status', `${n} album${n === 1 ? '' : 's'}.`);
     renderAlbumList();
@@ -275,70 +297,45 @@ async function loadAlbums() {
   }
 }
 
-async function readAlbumEntry(client, entry) {
-  const slug = entry.name.replace(/\.json$/, '');
-  try {
-    const file = await client.getFile(entry.path);
-    if (!file) throw new Error('file not found');
-    const album = JSON.parse(file.text);
-    if (!album || typeof album !== 'object') throw new Error('not an album object');
-    return { slug, album, sha: file.sha };
-  } catch (e) {
-    return { slug, album: null, sha: null, error: errorText(e) };
-  }
-}
-
-function compareRows(a, b) {
-  const ua = a.album?.updatedAt || '';
-  const ub = b.album?.updatedAt || '';
+function compareAlbums(a, b) {
+  const ua = String(a.updatedAt || '');
+  const ub = String(b.updatedAt || '');
   if (ua !== ub) return ub.localeCompare(ua);
-  return (a.album?.title || a.slug).localeCompare(b.album?.title || b.slug);
+  return String(a.title || a.slug).localeCompare(String(b.title || b.slug));
 }
 
 function renderAlbumList() {
   const q = val('l-search').toLowerCase();
   const rows = state.albums
-    .filter((r) => !q || [r.slug, r.album?.title, r.album?.artist].join(' ').toLowerCase().includes(q))
-    .sort(compareRows);
+    .filter((a) => !q || [a.slug, a.title, a.artist].join(' ').toLowerCase().includes(q))
+    .sort(compareAlbums);
   const list = $('l-list');
   list.replaceChildren(...rows.map(albumRow));
   if (!state.albums.length) list.append(h('li', { class: 'hint', text: 'No albums yet. Tap "New album" to add one.' }));
   else if (!rows.length) list.append(h('li', { class: 'hint', text: 'No album matches the search.' }));
 }
 
-function albumRow(r) {
-  if (!r.album) {
-    return h('li', { class: 'row' }, h('span', { class: 'row-text', 'data-kind': 'err', text: `${r.slug} — could not be read: ${r.error}` }));
-  }
-  const a = r.album;
-  const label = `${a.artist ? `${a.artist} — ` : ''}${a.title || '(untitled)'} (${r.slug})`;
+function albumRow(a) {
+  const label = `${a.artist ? `${a.artist} — ` : ''}${a.title || '(untitled)'} (${a.slug})`;
   return h('li', { class: 'row' },
     h('span', { class: 'row-text', text: label }),
     h('span', {},
-      h('button', { type: 'button', text: 'Edit', onclick: () => guard(() => openAlbum(r.slug)) }),
-      h('button', { type: 'button', text: 'Sticker', onclick: () => guard(() => showSticker(r.slug, r.album)) })));
+      h('button', { type: 'button', text: 'Edit', onclick: () => guard(() => openAlbum(a.slug)) }),
+      h('button', { type: 'button', text: 'Sticker', onclick: () => guard(() => showSticker(a.slug, a)) })));
 }
 
 /* ---------- album editor ---------- */
 
 function newAlbum() {
   if (!requireConfig()) return;
-  state.editor = { isNew: true, slug: '', sha: undefined };
+  state.editor = { isNew: true, slug: '', expectedUpdatedAt: '' };
   fillAlbumForm({});
   showView('editor');
 }
 
 async function openAlbum(slug) {
-  const file = await makeClient().getFile(albumPath(slug));
-  if (!file) throw new Error('This album no longer exists. Reload the list.');
-  let album;
-  try {
-    album = JSON.parse(file.text);
-  } catch {
-    throw new Error(`${slug}.json is not valid JSON.`);
-  }
-  if (!album || typeof album !== 'object') throw new Error(`${slug}.json is not an album.`);
-  state.editor = { isNew: false, slug, sha: file.sha };
+  const album = await makeClient().getAlbum(slug);
+  state.editor = { isNew: false, slug, expectedUpdatedAt: album.updatedAt || '' };
   fillAlbumForm(album);
   showView('editor');
 }
@@ -356,7 +353,6 @@ function fillAlbumForm(a) {
   for (const p of PLATFORMS) setVal(`a-link-${p.key}`, links[p.key]);
   setVal('a-lookup-url', '');
   clearCoverFile();
-  $('a-cover-copy').checked = true;
   setMsg('a-lookup-msg', '');
   setMsg('a-msg', '');
   refreshEditorChrome();
@@ -459,7 +455,7 @@ function onCoverFileChange() {
   updateCoverPreview();
 }
 
-// Repo-relative covers (data/...) resolve against the public site.
+// Relative covers (e.g. assets/img/...) resolve against the public site.
 function absoluteCover(raw) {
   return isHttpUrl(raw) ? raw : siteBase() + raw.replace(/^\/+/, '');
 }
@@ -478,31 +474,7 @@ function onCoverPreviewError() {
   const img = $('a-cover-preview');
   if (img.hidden) return;
   img.hidden = true;
-  setMsg('a-cover-msg', 'Cover preview not available yet (repo covers appear after the site redeploys).', 'warn');
-}
-
-// Returns the cover value to store: a repo path after an upload, otherwise the text field.
-async function resolveCover(client, album, warnings) {
-  const btn = $('a-save');
-  const file = $('a-cover-file').files[0];
-  let jpeg = null;
-  if (file) {
-    setBusy(btn, 'Processing cover…');
-    jpeg = await toJpegBase64(file);
-  } else if ($('a-cover-copy').checked && isHttpUrl(album.cover)) {
-    setBusy(btn, 'Copying cover…');
-    try {
-      jpeg = await toJpegBase64(album.cover);
-    } catch (e) {
-      warnings.push(`The cover could not be copied into the repo (${errorText(e)}), so the link is kept.`);
-    }
-  }
-  if (!jpeg) return album.cover;
-  const path = coverPath(album.slug);
-  setBusy(btn, 'Uploading cover…');
-  const sha = await client.getSha(path);
-  await client.putBinary(path, jpeg, `Cover for ${album.slug}`, sha || undefined);
-  return `data/covers/${album.slug}.jpg?v=${Date.now()}`;
+  setMsg('a-cover-msg', 'Cover preview not available. Check the image link.', 'warn');
 }
 
 async function onSaveAlbum() {
@@ -514,30 +486,34 @@ async function onSaveAlbum() {
     return;
   }
   const btn = $('a-save');
-  const warnings = [];
-  setBusy(btn, 'Saving…');
+  const file = $('a-cover-file').files[0];
   setMsg('a-msg', '');
+  setBusy(btn, 'Saving…');
   try {
     const client = makeClient();
-    if (ed.isNew && (await client.getSha(albumPath(album.slug)))) {
-      throw new Error('An album with this slug already exists.');
+    let jpeg = null;
+    if (file) {
+      setBusy(btn, 'Processing cover…');
+      jpeg = await toJpegBase64(file);
     }
-    album.cover = await resolveCover(client, album, warnings);
-    album.updatedAt = new Date().toISOString();
     setBusy(btn, 'Saving album…');
-    const res = await client.putFile(
-      albumPath(album.slug),
-      JSON.stringify(album, null, 2) + '\n',
-      `${ed.isNew ? 'Add' : 'Update'} album ${album.slug}`,
-      ed.isNew ? undefined : ed.sha,
-    );
-    state.editor = { isNew: false, slug: album.slug, sha: res.sha };
+    const opts = ed.isNew ? { isNew: true } : { isNew: false, expectedUpdatedAt: ed.expectedUpdatedAt };
+    let saved = await client.saveAlbum(album, opts);
+    if (jpeg) {
+      // The text is saved first, so EXISTS / CONFLICT stop here before uploadCover, which replaces <slug>.jpg.
+      state.editor = { isNew: false, slug: album.slug, expectedUpdatedAt: saved.updatedAt || '' };
+      refreshEditorChrome();
+      setBusy(btn, 'Uploading cover…');
+      album.cover = await client.uploadCover(album.slug, jpeg, 'image/jpeg');
+      setBusy(btn, 'Saving album…');
+      saved = await client.saveAlbum(album, { isNew: false, expectedUpdatedAt: saved.updatedAt });
+    }
+    state.editor = { isNew: false, slug: album.slug, expectedUpdatedAt: saved.updatedAt || '' };
     setVal('a-cover', album.cover);
     clearCoverFile();
     refreshEditorChrome();
     updateCoverPreview();
-    const done = 'Saved ✓ — the public page updates in 1–3 minutes.';
-    setStatus([done, ...warnings].join(' '), warnings.length ? 'err' : 'ok');
+    setStatus(SAVED_MSG, 'ok');
     await showSticker(album.slug, album);
   } catch (e) {
     setMsg('a-msg', errorText(e), 'err');
@@ -559,18 +535,10 @@ async function onDeleteAlbum() {
   const btn = $('a-delete');
   setBusy(btn, 'Deleting…');
   try {
-    const client = makeClient();
-    await client.deleteFile(albumPath(ed.slug), ed.sha, `Delete album ${ed.slug}`);
-    let warning = '';
-    try {
-      const coverSha = await client.getSha(coverPath(ed.slug));
-      if (coverSha) await client.deleteFile(coverPath(ed.slug), coverSha, `Delete cover for ${ed.slug}`);
-    } catch (e) {
-      warning = `Album deleted, but its cover file could not be removed: ${errorText(e)}`;
-    }
+    await makeClient().deleteAlbum(ed.slug);
     state.editor = null;
     await showAlbums();
-    setStatus(warning || `Deleted ${ed.slug}.`, warning ? 'err' : 'ok');
+    setStatus(`Deleted ${ed.slug}.`, 'ok');
   } catch (e) {
     setStatus(errorText(e), 'err');
   } finally {
@@ -610,17 +578,8 @@ async function showSticker(slug, album) {
 }
 
 async function onCopy() {
-  const input = $('k-url');
-  try {
-    await navigator.clipboard.writeText(input.value);
-    setStatus('Link copied.', 'ok');
-  } catch {
-    input.focus();
-    input.select();
-    input.setSelectionRange(0, input.value.length);
-    const ok = document.execCommand('copy');
-    setStatus(ok ? 'Link copied.' : 'Copy failed — select the link and copy it by hand.', ok ? 'ok' : 'err');
-  }
+  const ok = await copyFrom($('k-url'));
+  setStatus(ok ? 'Link copied.' : 'Copy failed — select the link and copy it by hand.', ok ? 'ok' : 'err');
 }
 
 async function onNfcWrite() {
@@ -639,30 +598,13 @@ async function onNfcWrite() {
 
 /* ---------- site settings ---------- */
 
-function defaultSite() {
-  return {
-    name: 'Backwash Records',
-    tagline: 'Record store',
-    theme: 'ink',
-    themeSwitcher: true,
-    catalogUrl: '',
-    socials: Object.fromEntries(SOCIALS.map((s) => [s.key, ''])),
-    texts: {},
-  };
-}
-
 async function showSite() {
   if (!requireConfig()) return;
   showView('site');
-  state.siteFile = null;
   $('s-save').disabled = true;
   setMsg('s-msg', 'Loading…');
   try {
-    const file = await makeClient().getFile(siteJsonPath());
-    state.siteFile = file
-      ? { sha: file.sha, data: JSON.parse(file.text) }
-      : { sha: undefined, data: defaultSite() };
-    fillSiteForm(state.siteFile.data);
+    fillSiteForm(await makeClient().getSite());
     $('s-save').disabled = false;
     setMsg('s-msg', '');
   } catch (e) {
@@ -680,33 +622,23 @@ function fillSiteForm(site) {
   for (const key of Object.keys(DEFAULT_TEXTS)) setVal(`s-text-${key}`, site.texts?.[key]);
 }
 
-function readSiteForm(base) {
-  const site = {
-    ...base,
+// Texts that equal the default (or are empty) are saved as '' so the public page uses its own default.
+function readSiteForm() {
+  const socials = Object.fromEntries(SOCIALS.map((s) => [s.key, val(`s-social-${s.key}`)]));
+  const texts = {};
+  for (const key of Object.keys(DEFAULT_TEXTS)) {
+    const v = val(`s-text-${key}`);
+    texts[key] = !v || v === DEFAULT_TEXTS[key] ? '' : v;
+  }
+  return {
     name: val('s-name'),
     tagline: val('s-tagline'),
     theme: $('s-theme').value,
+    themeSwitcher: $('s-switcher').checked,
     catalogUrl: val('s-catalog'),
-    socials: { ...base.socials },
-    texts: { ...base.texts },
+    socials,
+    texts,
   };
-  for (const s of SOCIALS) site.socials[s.key] = val(`s-social-${s.key}`);
-  for (const key of Object.keys(DEFAULT_TEXTS)) {
-    const v = val(`s-text-${key}`);
-    site.texts[key] = v === DEFAULT_TEXTS[key] ? '' : v;
-  }
-  return withThemeSwitcher(site, $('s-switcher').checked);
-}
-
-// Puts themeSwitcher right after theme in site.json, also when the file did not have it yet.
-function withThemeSwitcher(site, on) {
-  const out = {};
-  for (const [key, value] of Object.entries(site)) {
-    if (key === 'themeSwitcher') continue;
-    out[key] = value;
-    if (key === 'theme') out.themeSwitcher = on;
-  }
-  return out;
 }
 
 function validateSite(site) {
@@ -725,7 +657,7 @@ function validateSite(site) {
 }
 
 async function onSaveSite() {
-  const site = readSiteForm(state.siteFile.data);
+  const site = readSiteForm();
   const problem = validateSite(site);
   if (problem) {
     setMsg('s-msg', problem, 'err');
@@ -734,14 +666,8 @@ async function onSaveSite() {
   const btn = $('s-save');
   setBusy(btn, 'Saving…');
   try {
-    const res = await makeClient().putFile(
-      siteJsonPath(),
-      JSON.stringify(site, null, 2) + '\n',
-      'Update site settings',
-      state.siteFile.sha,
-    );
-    state.siteFile = { sha: res.sha, data: site };
-    setMsg('s-msg', 'Saved ✓ — the public site updates in 1–3 minutes.', 'ok');
+    await makeClient().saveSite(site);
+    setMsg('s-msg', SAVED_MSG, 'ok');
   } catch (e) {
     setMsg('s-msg', errorText(e), 'err');
   } finally {
@@ -791,7 +717,8 @@ function wire() {
   $('status').addEventListener('click', () => { $('status').hidden = true; });
 
   $('c-save').addEventListener('click', () => guard(onSaveConnection));
-  $('c-forget').addEventListener('click', onForgetToken);
+  $('c-forget').addEventListener('click', onForgetPassword);
+  $('c-config-copy').addEventListener('click', () => guard(onCopyConfig));
 
   $('l-new').addEventListener('click', () => guard(async () => newAlbum()));
   $('l-search').addEventListener('input', renderAlbumList);
@@ -818,7 +745,9 @@ function wire() {
   $('s-save').addEventListener('click', () => guard(onSaveSite));
 }
 
-function init() {
+async function init() {
+  state.config = await loadConfig();
+  state.settings = loadSettings(state.config);
   buildFields();
   fillConnectionForm();
   wire();
@@ -826,7 +755,7 @@ function init() {
     guard(showAlbums);
   } else {
     showView('connection');
-    setStatus('Welcome! Paste a GitHub token on this page to start.', 'info');
+    setStatus('Welcome! Enter the web app URL and admin password on this page to start.', 'info');
   }
 }
 
