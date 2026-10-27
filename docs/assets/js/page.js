@@ -3,6 +3,7 @@
 // Only trusted strings (ICONS) go through innerHTML; all data uses textContent / attributes.
 
 import { PLATFORMS, SOCIALS, THEMES, THEME_STORAGE_KEY, DEFAULT_TEXTS, SLUG_RE } from './platforms.js';
+import { loadConfig, loadSite, loadAlbum } from './data.js';
 
 const DEFAULT_NAME = 'Backwash Records';
 const DEFAULT_THEME = 'ink';
@@ -66,33 +67,7 @@ function setIcon(node, key, icons) {
   return node;
 }
 
-// ---------- data loading ----------
-
-async function fetchJson(url) {
-  const res = await fetch(url, { cache: 'no-cache' });
-  if (!res.ok) throw new Error(`HTTP ${res.status} for ${url}`);
-  const data = await res.json();
-  if (!isPlainObject(data)) throw new Error(`Expected an object in ${url}`);
-  return data;
-}
-
-async function loadSite() {
-  try {
-    return await fetchJson('data/site.json');
-  } catch (err) {
-    console.warn('site.json unavailable, using defaults', err);
-    return { name: DEFAULT_NAME };
-  }
-}
-
-async function loadAlbum(slug) {
-  try {
-    return await fetchJson(`data/albums/${slug}.json`);
-  } catch (err) {
-    console.warn(`Album "${slug}" unavailable`, err);
-    return null;
-  }
-}
+// ---------- preview ----------
 
 // base64url UTF-8 JSON -> album object, or null.
 function readPreview() {
@@ -520,13 +495,16 @@ async function boot() {
   const slug = params.get('a') ?? '';
   const validSlug = SLUG_RE.test(slug) ? slug : '';
   const preview = readPreview();
+  const config = loadConfig();
 
-  const [{ ICONS }, site, albumData] = await Promise.all([
+  const [{ ICONS }, siteData, albumData] = await Promise.all([
     import('./icons.js').catch(() => ({ ICONS: {} })),
-    loadSite(),
-    preview ? Promise.resolve(preview) : validSlug ? loadAlbum(validSlug) : Promise.resolve(null),
+    config.then(loadSite),
+    preview ? Promise.resolve(preview) : validSlug ? config.then((c) => loadAlbum(c, validSlug)) : Promise.resolve(null),
   ]);
 
+  // loadSite resolves null when the sheet and the fallback both fail: use the bare defaults.
+  const site = siteData || { name: DEFAULT_NAME };
   const icons = ICONS && typeof ICONS === 'object' ? ICONS : {};
   const name = str(site.name) || DEFAULT_NAME;
   const texts = textsFrom(site.texts);
