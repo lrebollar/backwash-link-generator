@@ -407,7 +407,9 @@ async function onLookup() {
   setBusy(btn, 'Looking up…');
   setMsg('a-lookup-msg', 'Looking up the link…');
   try {
-    const found = await lookup(url, { country: state.settings.country || 'US' });
+    // Connected: the Apps Script does the song.link call (browsers are blocked by CORS).
+    const api = isConfigured() ? makeClient() : undefined;
+    const found = await lookup(url, { country: state.settings.country || 'US', api });
     applyLookup(found);
     setMsg('a-lookup-msg', 'Filled in. Check the values, then save.', 'ok');
   } catch (e) {

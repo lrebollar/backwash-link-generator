@@ -25,6 +25,10 @@
  *  4. In the Apps Script editor, click the gear icon (Project Settings). Under
  *     "Script properties", click "Add script property":
  *        Property: ADMIN_PASSWORD      Value: a password you choose
+ *     Optional: add one more property for more song.link lookups per minute
+ *     (the album auto-fill box uses song.link; without a key its shared limit
+ *     applies, about 10 lookups a minute):
+ *        Property: ODESLI_API_KEY      Value: a free key from developers@song.link
  *     Click "Save script properties". Keep this password private.
  *  5. Back in the editor, choose "setup" from the function menu at the top and
  *     click Run. Google asks you to review permissions: choose your account,
@@ -42,9 +46,15 @@
  *     It also goes into the website's docs/config.json, next to the Web app URL.
  *
  *  UPDATING THIS SCRIPT LATER (the Web app URL stays the same)
- *  Paste the new version into the editor and save. Then click
- *  Deploy, Manage deployments, the pencil icon, set Version to "New version",
- *  and click Deploy. Do NOT choose "New deployment" again: that creates a new URL.
+ *  1. Paste the new version into the editor and save.
+ *  2. Choose "setup" from the function menu and click Run, then Allow if Google
+ *     asks for a new permission (the song.link lookup needs one). Running setup
+ *     again is always safe.
+ *  3. Click Deploy, Manage deployments, the pencil icon, set Version to
+ *     "New version", and click Deploy. Do NOT choose "New deployment" again:
+ *     that creates a new URL.
+ *  The optional ODESLI_API_KEY property (step 4) can be added at any time; it
+ *  takes effect without a new deployment.
  *
  *  Anyone who can EDIT the sheet can also see the script properties, so give
  *  edit access only to people you trust.
@@ -55,9 +65,10 @@
  *        ?action=site               -> the store settings
  *        ?action=album&slug=<slug>  -> one album
  *  - POST (JSON body {action, password, ...}): ping, listAlbums, getAlbum,
- *        saveAlbum, deleteAlbum, getSite, saveSite, uploadCover.
+ *        saveAlbum, deleteAlbum, getSite, saveSite, uploadCover, lookup.
+ *        lookup {url, country} asks song.link for the links of one album link.
  *  Every answer is JSON: {ok:true, ...} or {ok:false, code, error}.
- *  Codes: AUTH, SETUP, BAD_REQUEST, NOT_FOUND, EXISTS, CONFLICT, SERVER.
+ *  Codes: AUTH, SETUP, BAD_REQUEST, NOT_FOUND, EXISTS, CONFLICT, RATE_LIMIT, SERVER.
  */
 
 // ============================================================================
@@ -66,7 +77,7 @@
 
 const ALBUMS_SHEET = 'Albums';
 const SITE_SHEET = 'Site';
-const API_VERSION = 1;
+const API_VERSION = 2;
 
 // Album columns in template order. Headers are matched BY NAME, so extra
 // columns are tolerated and the order of these may differ in a real sheet.
@@ -89,14 +100,14 @@ const SITE_KEYS = [
   { key: 'tagline', value: 'Record store', notes: 'Short line under the store name.' },
   { key: 'theme', value: 'ink', notes: 'Default design: ink, paper, fire, sun or cover.' },
   { key: 'themeSwitcher', value: 'TRUE', notes: 'TRUE shows the "Change design" button to visitors. FALSE hides it.' },
-  { key: 'catalogUrl', value: 'https://example.com/catalog', notes: 'Link to your full catalog ("Browse our catalog" button).' },
-  { key: 'socials.instagram', value: 'https://www.instagram.com/', notes: 'Full link to your Instagram profile. Empty hides it.' },
-  { key: 'socials.facebook', value: 'https://www.facebook.com/', notes: 'Full link to your Facebook page. Empty hides it.' },
-  { key: 'socials.tiktok', value: 'https://www.tiktok.com/', notes: 'Full link to your TikTok profile. Empty hides it.' },
+  { key: 'catalogUrl', value: '', notes: 'Link to your full catalog ("Browse our catalog" button).' },
+  { key: 'socials.instagram', value: '', notes: 'Full link to your Instagram profile. Empty hides it.' },
+  { key: 'socials.facebook', value: '', notes: 'Full link to your Facebook page. Empty hides it.' },
+  { key: 'socials.tiktok', value: '', notes: 'Full link to your TikTok profile. Empty hides it.' },
   { key: 'socials.x', value: '', notes: 'Full link to your X profile. Empty hides it.' },
   { key: 'socials.youtube', value: '', notes: 'Full link to your YouTube channel. Empty hides it.' },
   { key: 'socials.whatsapp', value: '', notes: 'WhatsApp link, for example https://wa.me/15551234567. Empty hides it.' },
-  { key: 'socials.email', value: 'hello@example.com', notes: 'Email address, without mailto:. Empty hides it.' },
+  { key: 'socials.email', value: '', notes: 'Email address, without mailto:. Empty hides it.' },
   { key: 'socials.maps', value: '', notes: 'Link to your location on Google Maps. Empty hides it.' },
   { key: 'socials.website', value: '', notes: 'Link to your own website. Empty hides it.' },
   { key: 'texts.listen', value: 'Listen on', notes: 'Label above the streaming buttons. Empty = built-in wording.' },
@@ -113,6 +124,9 @@ const THEME_KEYS = ['ink', 'paper', 'fire', 'sun', 'cover'];
 const SLUG_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const SLUG_MAX_LENGTH = 60;
 
+// Links for the song.link lookup: http or https, with a host and no spaces.
+const HTTP_LINK_RE = /^https?:\/\/[^\s/]+\S*$/i;
+
 const ADMIN_PASSWORD_PROPERTY = 'ADMIN_PASSWORD';
 const COVERS_FOLDER_PROPERTY = 'COVERS_FOLDER_ID';
 const COVERS_FOLDER_NAME = 'Backwash Records covers';
@@ -120,6 +134,8 @@ const LOCK_WAIT_MS = 20000;
 const AUTH_DELAY_MS = 1000;
 const COVER_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
 const COVER_MAX_BASE64_CHARS = 14 * 1024 * 1024; // about 10 MB of image data
+const ODESLI_KEY_PROPERTY = 'ODESLI_API_KEY'; // optional script property (free key)
+const ODESLI_LINKS_URL = 'https://api.song.link/v1-alpha.1/links';
 
 // The demo album written by setup() when the Albums tab has no albums yet.
 const DEMO_ALBUM = {
@@ -130,7 +146,7 @@ const DEMO_ALBUM = {
   label: 'Backwash Records',
   note: 'Demo record — delete me',
   cover: 'assets/img/demo-cover.jpg',
-  shopUrl: 'https://example.com/catalog/demo',
+  shopUrl: '',
   links: {
     spotify: 'https://open.spotify.com/search/backwash%20records',
     appleMusic: 'https://music.apple.com/us/search?term=backwash%20records',
@@ -197,6 +213,13 @@ function parseBool(value) {
 
 function isValidSlug(slug) {
   return typeof slug === 'string' && slug.length <= SLUG_MAX_LENGTH && SLUG_RE.test(slug);
+}
+
+// The song.link request address for one link. The key is optional (empty = none).
+function odesliUrl(link, country, key) {
+  let url = ODESLI_LINKS_URL + '?url=' + encodeURIComponent(link) + '&userCountry=' + country;
+  if (key) url += '&key=' + encodeURIComponent(key);
+  return url;
 }
 
 function normalizeTheme(value) {
@@ -596,6 +619,8 @@ function runAction_(action, body) {
       return saveSiteAction_(body);
     case 'uploadCover':
       return uploadCoverAction_(body);
+    case 'lookup':
+      return lookupAction_(body);
     case '':
       throw apiError('BAD_REQUEST', 'Missing "action".');
     default:
@@ -756,6 +781,55 @@ function getCoversFolder_() {
   const folder = DriveApp.createFolder(COVERS_FOLDER_NAME);
   props.setProperty(COVERS_FOLDER_PROPERTY, folder.getId());
   return folder;
+}
+
+// ============================================================================
+// song.link lookup. The browser cannot call song.link (no CORS), so the admin
+// panel asks this action instead. It writes nothing, so it runs without the lock.
+// ============================================================================
+
+// Returns song.link's raw answer for one streaming link as `data`.
+function lookupAction_(body) {
+  const link = cleanString(body.url);
+  if (!HTTP_LINK_RE.test(link)) {
+    throw apiError('BAD_REQUEST', 'Paste a full link, e.g. https://open.spotify.com/album/…');
+  }
+  const country = cleanString(body.country).toUpperCase() || 'US';
+  if (!/^[A-Z]{2}$/.test(country)) {
+    throw apiError('BAD_REQUEST', 'The country must be a 2-letter code, for example US.');
+  }
+  const key = cleanString(PropertiesService.getScriptProperties().getProperty(ODESLI_KEY_PROPERTY));
+
+  let response;
+  try {
+    response = UrlFetchApp.fetch(odesliUrl(link, country, key), { muteHttpExceptions: true });
+  } catch (err) {
+    if (/permission|external_request/i.test(messageOf(err))) {
+      throw apiError('SETUP', 'The Apps Script needs one more permission: open Apps Script, run setup once and click Allow, then Deploy → Manage deployments → Edit (pencil) → Version: New version → Deploy.');
+    }
+    throw err;
+  }
+
+  const status = response.getResponseCode();
+  if (status === 429) {
+    throw apiError('RATE_LIMIT', 'Too many lookups — wait a minute and try again.');
+  }
+  if (status === 400 || status === 404) {
+    throw apiError('NOT_FOUND', "Couldn't find that link on the streaming services. Check the URL or fill the fields by hand.");
+  }
+  if (status < 200 || status > 299) {
+    throw apiError('SERVER', 'song.link answered HTTP ' + status + '.');
+  }
+  let data;
+  try {
+    data = JSON.parse(response.getContentText());
+  } catch (err) {
+    data = null;
+  }
+  if (!data || typeof data !== 'object' || Array.isArray(data)) {
+    throw apiError('SERVER', 'song.link sent an answer that could not be read.');
+  }
+  return { data: data };
 }
 
 // ============================================================================

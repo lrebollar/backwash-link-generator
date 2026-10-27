@@ -13,6 +13,10 @@ const THEME_KEYS = THEMES.map((t) => t.key);
 const CONTROL_CHARS = /[\u0000-\u001f\u007f]/;
 const SCHEME_RE = /^[a-z][a-z0-9+.-]*:/i;
 const PREVIEW_RE = /^#preview=([A-Za-z0-9_-]+)/;
+// RFC 2606 example domains (example.com/net/org and their subdomains) are template placeholders.
+const PLACEHOLDER_HOST_RE = /(^|\.)example\.(com|net|org)$/i;
+// Socials where a link without a profile path ("https://www.instagram.com/") is a placeholder.
+const PROFILE_SOCIALS = ['instagram', 'facebook', 'tiktok', 'x', 'youtube', 'whatsapp'];
 
 const params = new URLSearchParams(location.search);
 
@@ -36,13 +40,15 @@ function h(tag, className, text) {
 }
 
 // Only http(s) URLs and scheme-less relative paths survive (javascript:, data:, //host, ...).
+// Placeholder hosts give '' too, so every link type (shop, catalog, platforms, socials) hides them.
 function safeUrl(value) {
   const s = str(value);
   if (!s || CONTROL_CHARS.test(s)) return '';
   if (SCHEME_RE.test(s)) {
     try {
-      const { protocol } = new URL(s);
-      return protocol === 'https:' || protocol === 'http:' ? s : '';
+      const { protocol, hostname } = new URL(s);
+      if (protocol !== 'https:' && protocol !== 'http:') return '';
+      return PLACEHOLDER_HOST_RE.test(hostname) ? '' : s;
     } catch {
       return '';
     }
@@ -51,13 +57,31 @@ function safeUrl(value) {
   return s;
 }
 
+// A profile social needs a path: "https://x.com" alone is a placeholder. Relative hrefs resolve
+// against this page, so only the root ('/' or empty path) counts as no profile.
+function hasProfilePath(key, href) {
+  if (!PROFILE_SOCIALS.includes(key)) return true;
+  try {
+    const { pathname } = new URL(href, location.href);
+    return !['', '/'].includes(pathname);
+  } catch {
+    return false;
+  }
+}
+
 // Social values: email gets mailto: when it has no scheme; everything else goes through safeUrl.
+// Empty, placeholder and profile-less values give ''.
 function socialHref(key, value) {
-  if (key !== 'email') return safeUrl(value);
+  if (key !== 'email') {
+    const href = safeUrl(value);
+    return href && hasProfilePath(key, href) ? href : '';
+  }
   const s = str(value);
   if (/^https?:\/\//i.test(s)) return safeUrl(s);
   const address = s.replace(/^mailto:/i, '');
-  return !CONTROL_CHARS.test(address) && /^[^\s@]+@[^\s@]+$/.test(address) ? `mailto:${address}` : '';
+  const match = /^[^\s@]+@([^\s@]+)$/.exec(address);
+  if (!match || CONTROL_CHARS.test(address) || PLACEHOLDER_HOST_RE.test(match[1])) return '';
+  return `mailto:${address}`;
 }
 
 // Icons come from icons.js (trusted markup). Missing key -> music icon -> nothing.

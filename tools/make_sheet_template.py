@@ -52,7 +52,7 @@ DEMO_ALBUM = {
     "label": "Backwash Records",
     "note": "Demo record — delete me",
     "cover": "assets/img/demo-cover.jpg",
-    "shopUrl": "https://example.com/catalog/demo",
+    "shopUrl": "",
     "spotify": "https://open.spotify.com/search/backwash%20records",
     "appleMusic": "https://music.apple.com/us/search?term=backwash%20records",
     "youtubeMusic": "https://music.youtube.com/search?q=backwash%20records",
@@ -79,13 +79,13 @@ SITE_SETTINGS = [
      "Starting design: ink, paper, fire, sun or cover. Pick from the drop-down."),
     ("themeSwitcher", "TRUE",
      "TRUE shows the Change design button; FALSE locks the design. Pick from the drop-down."),
-    ("catalogUrl", "https://example.com/catalog",
+    ("catalogUrl", "",
      "Link to your full catalog. Must start with https://"),
-    ("socials.instagram", "https://www.instagram.com/",
+    ("socials.instagram", "",
      "Full profile link, starts with https://. Leave empty to hide it."),
-    ("socials.facebook", "https://www.facebook.com/",
+    ("socials.facebook", "",
      "Full profile link, starts with https://. Leave empty to hide it."),
-    ("socials.tiktok", "https://www.tiktok.com/",
+    ("socials.tiktok", "",
      "Full profile link, starts with https://. Leave empty to hide it."),
     ("socials.x", "",
      "Full profile link, starts with https://. Leave empty to hide it."),
@@ -93,7 +93,7 @@ SITE_SETTINGS = [
      "Full channel link, starts with https://. Leave empty to hide it."),
     ("socials.whatsapp", "",
      "https://wa.me/<country code + number>, digits only, e.g. https://wa.me/15551234567"),
-    ("socials.email", "hello@example.com",
+    ("socials.email", "",
      "Plain address, e.g. hello@yourstore.com. Leave empty to hide it."),
     ("socials.maps", "",
      "Link to your place on Google Maps, starts with https://. Leave empty to hide it."),
@@ -160,7 +160,7 @@ def build_albums(ws):
                 ALBUM_COMMENTS[name], AUTHOR, width=260, height=90)
 
     for col, (name, _) in enumerate(ALBUM_HEADERS, start=1):
-        ws.cell(row=2, column=col, value=DEMO_ALBUM.get(name))
+        ws.cell(row=2, column=col, value=DEMO_ALBUM.get(name) or None)
 
     for row in ws.iter_rows(min_row=1, max_row=MAX_ROW,
                             min_col=1, max_col=len(ALBUM_HEADERS)):
