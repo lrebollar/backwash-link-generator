@@ -129,7 +129,7 @@ Do this for each record. It takes about 5 minutes per record.
 
 1. In the admin panel, tap **Albums**. Then tap **New album**.
 2. Paste a Spotify link to the album. Apple Music, YouTube, Deezer and Tidal links also work.
-3. Click **Auto-fill**. It fills in the title, artist, cover and links to the other streaming services. It uses the free song.link service.
+3. Click **Auto-fill**. It fills in the title, artist, cover and links to the other streaming services. It uses the free song.link service, through your Apps Script.
 4. Check every field. Fix anything that is wrong.
 5. Paste the link to this record in your catalog or online shop into the **Shop URL** box.
 6. Click **Save**. The record is saved to your Google Sheet. The public page shows it within about a minute.
@@ -161,6 +161,17 @@ The Sticker panel opens by itself after you save. For an older record, tap **Alb
 
 Tap the sticker with your phone. The record page should open. If it does not, write the sticker again.
 
+## Update the Apps Script
+
+When `google-sheet/Code.gs` changes (for example, the update that made **Auto-fill** work), copy the new version into your sheet once:
+
+1. On github.com, open `google-sheet/Code.gs` and copy all of it.
+2. In your Google Sheet, click **Extensions**, then **Apps Script**. Select all the code there, delete it, and paste the new code. Click **Save** (disk icon).
+3. Choose the function **setup** in the toolbar and click **Run**. If Google asks for permission, click **Review permissions**, choose your account, then **Advanced** → **Go to Backwash admin (unsafe)** → **Allow**. (The Auto-fill update needs permission to contact song.link.)
+4. Click **Deploy**, then **Manage deployments**. Click the pencil icon. Set **Version** to **New version**. Click **Deploy**.
+
+The Web app URL stays the same, so nothing else changes. Your password and data are kept.
+
 ## Edit the sheet by hand
 
 You can also change records and store settings directly in the Google Sheet. Open the sheet on drive.google.com. Changes appear on the website within about a minute.
@@ -182,6 +193,7 @@ You can also change records and store settings directly in the Google Sheet. Ope
 - Change only the **value** column (column B). Do not change the **key** column (column A).
 - The **notes** column (column C) explains each setting. The site ignores it.
 - An empty value hides that item on the site. For button words, an empty value means the normal wording is used.
+- Social links must point to your own profile, for example `https://www.instagram.com/backwashrecords`. A link to a network's home page (like `https://www.instagram.com/`) or an `example.com` address is treated as empty and hidden.
 - **theme**: type one of these words: `ink`, `paper`, `fire`, `sun` or `cover`. See **Change the design**.
 - **themeSwitcher**: type `TRUE` to show the **Change design** button. Type `FALSE` to hide it.
 - The **How to use** tab has short notes. The site ignores it.
@@ -239,7 +251,7 @@ Use `&theme=ink`, `&theme=paper`, `&theme=sun` or `&theme=cover` to try the othe
 ## Good to know
 
 - **Changes to records and store settings show within about a minute.** Some phones keep an old copy of a page for up to about 10 minutes. Wait a little, or reload the page.
-- **Auto-fill has a limit.** It allows about 10 lookups per minute. If you see "Too many lookups", wait a minute and try again.
+- **Auto-fill has a limit.** It allows about 10 lookups per minute. If you see "Too many lookups", wait a minute and try again. For a higher limit, ask song.link for a free API key (email developers@song.link) and add it in Apps Script → Project Settings → Script properties as `ODESLI_API_KEY`.
 - **If Auto-fill fails,** paste the streaming links into the link boxes by hand.
 - **Every change can be undone.** For records and store settings, open the Google Sheet. Click **File**, then **Version history**. Choose an older version and restore it. Code changes are kept in GitHub's history.
 - **Google's limits are far above a record store's needs.** Google sets limits on free sheets and scripts. A record store uses far less than those limits.
