@@ -97,7 +97,11 @@ jobs:
             echo "Yes."
           else
             echo "$out"
-            fail "Push check failed. $(explain "$out")"
+            case "$out" in
+              *"fetch first"*|*"non-fast-forward"*)
+                echo "Yes. GitLab's main also has commits that are not on GitHub (for example a README GitLab created); the push step combines them automatically, keeping GitHub's files." ;;
+              *) fail "Push check failed. $(explain "$out")" ;;
+            esac
           fi
 
       - name: Push main to GitLab
@@ -107,15 +111,22 @@ jobs:
           HOST: ${{ steps.check.outputs.host }}
           PROJECT: ${{ steps.check.outputs.project }}
         run: |
-          if out="$(git push "https://oauth2:${GITLAB_TOKEN}@${HOST}/${PROJECT}.git" HEAD:refs/heads/main 2>&1)"; then
-            echo "$out"; exit 0
-          fi
-          echo "$out"
+          url="https://oauth2:${GITLAB_TOKEN}@${HOST}/${PROJECT}.git"
+          push() { out="$(git push "$url" HEAD:refs/heads/main 2>&1)"; status=$?; echo "$out"; return $status; }
+          push && exit 0
+          case "$out" in
+            *"fetch first"*|*"non-fast-forward"*)
+              # GitHub is the source of truth. Instead of force-pushing (blocked on GitLab's protected main),
+              # add a merge commit that keeps GitHub's files exactly and has GitLab's main as a parent.
+              echo "GitLab's main has commits that are not on GitHub. Combining them, keeping GitHub's files."
+              git fetch --no-tags "$url" main
+              git -c user.name="GitHub mirror" -c user.email="github-mirror@users.noreply.github.com" \
+                merge -s ours --allow-unrelated-histories --no-edit -m "Mirror from GitHub (GitHub's files win)" FETCH_HEAD
+              push && exit 0 ;;
+          esac
           case "$out" in
             *"protected branch"*|*"not allowed to push"*)
               echo "::error::GitLab refuses pushes to main. In GitLab: Settings → Repository → Protected branches → main → Allowed to push and merge: Maintainers, and make sure your account is a Maintainer or Owner of the project." ;;
-            *"non-fast-forward"*|*"fetch first"*)
-              echo "::error::GitLab's main already has other commits (for example a README made with the project). Delete and recreate the GitLab project empty (README, Step 1, item 2)." ;;
             *) echo "::error::The push to GitLab failed (see above)." ;;
           esac
           exit 1
