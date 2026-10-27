@@ -32,7 +32,7 @@ The code must be on the `main` branch first. If there is an open pull request, m
 2. Create the project. Click **+** (Create new), then **New project/repository**, then **Create blank project**.
    - Project name: `backwash-link-generator`
    - Visibility Level: **Private**
-   - Untick **Initialize repository with a README**
+   - Untick **Initialize repository with a README** (if you forget, it still works: the copy keeps GitHub's files)
    - Click **Create project**.
    - Write down the project path shown in its address after `gitlab.com/`. It looks like `your-username/backwash-link-generator`.
 3. Create a GitLab token. This lets GitHub copy your changes to GitLab. Treat it like a password.
@@ -52,7 +52,7 @@ The code must be on the `main` branch first. If there is an open pull request, m
    - Click **New repository secret**.
    - Name: `GITLAB_TOKEN`. Secret: paste the `glpat-` token. Click **Add secret**.
    - Click **New repository secret** again.
-   - Name: `GITLAB_PROJECT`. Secret: the project path from item 2 above, for example `your-username/backwash-link-generator`. Type only the path, not the web address that starts with `https://gitlab.com/`. Click **Add secret**.
+   - Name: `GITLAB_PROJECT`. Secret: the project path from item 2 above, for example `your-username/backwash-link-generator`. Pasting the project's whole web address also works. Click **Add secret**.
 5. Start the first copy. On github.com, open this repository. Click the **Actions** tab. Click **Mirror to GitLab**. Click **Run workflow**. Check that the branch box says `main`, then click **Run workflow** again. The run turns green in under a minute. After this, it runs by itself every time the code changes.
 6. Find your site address. On gitlab.com, open the project. Click **Build**, then **Pipelines**. Wait until the **pages** job shows that it has passed. Then click **Deploy**, then **Pages**. Your site address is shown there.
    - Optional: untick **Use unique domain** on that page. Your address then becomes `https://<your-username>.gitlab.io/backwash-link-generator/`.
@@ -64,9 +64,9 @@ The code must be on the `main` branch first. If there is an open pull request, m
 
 - The **Mirror to GitLab** run is red and says "Add the GITLAB_PROJECT and GITLAB_TOKEN secrets": do item 4 above again.
 - The run is red and mentions an authentication error: the token is wrong or expired, or it lacks push access (**Code → Push** on a fine-grained token, or the **write_repository** scope on a classic token). Make a new token (item 3 above), then update the **GITLAB_TOKEN** secret (item 4 above).
-- The run says the push was rejected: the GitLab project was created with a README. Delete the project in GitLab, then create it again without the README (item 2 above). Or ask for help.
+- To test the secrets without changing anything on GitLab: **Actions** → **Mirror to GitLab** → **Run workflow** → tick **Only check the secrets and access** → **Run workflow**. The log explains any problem in plain words.
 - GitLab asks you to verify your account before the **pages** job runs: verify it (item 1 above).
-- The run is red and says the project or repository was not found: GITLAB_PROJECT must be only the project path from item 2 above, for example your-username/backwash-link-generator. Update the GITLAB_PROJECT secret (item 4 above).
+- The run is red and says GitLab cannot find the project: check the GITLAB_PROJECT secret (item 4 above) and, for a fine-grained token, that its access includes this project.
 - No **pages** job appears under **Build**, then **Pipelines**: in GitLab open **Settings**, then **Repository**, then **Branch defaults** and check that the default branch is `main`.
 - The site address shows Not Found after the **pages** job passed: finish item 7 (**Pages** set to **Everyone**) and wait a few minutes.
 
