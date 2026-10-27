@@ -3,6 +3,7 @@
 #
 # Needs two repository secrets (GitHub → Settings → Secrets and variables → Actions):
 #   GITLAB_PROJECT  path of the GitLab project, e.g. "your-gitlab-username/backwash-link-generator"
+#                   (its full web address is accepted too)
 #   GITLAB_TOKEN    GitLab personal access token that can push to that project
 #                   (fine-grained: Code → Push and Download; classic: write_repository scope)
 # Optional secret GITLAB_HOST for a self-hosted GitLab (default: gitlab.com).
@@ -46,9 +47,12 @@ jobs:
 
           host="${GITLAB_HOST:-gitlab.com}"
           project="$(printf '%s' "$GITLAB_PROJECT" | tr -d '[:space:]')"
+          # A pasted web address works too: keep only the path after the host.
           case "$project" in
-            http*|*gitlab.com*) fail "GITLAB_PROJECT must be only the project path, like your-username/backwash-link-generator, not a web address." ;;
+            *://*) project="${project#*://}"; project="${project#*/}"; echo "GITLAB_PROJECT is a web address; using only its path." ;;
+            "$host"/*) project="${project#"$host"/}" ;;
           esac
+          project="${project%%/-/*}"; project="${project%%\?*}"; project="${project%%#*}" # drop /-/tree/main, ?query, #anchor
           project="${project#/}"; project="${project%/}"; project="${project%.git}"
           echo "$project" | grep -Eq '^[A-Za-z0-9_.-]+(/[A-Za-z0-9_.-]+)+$' \
             || fail "GITLAB_PROJECT does not look like a project path (owner/project)."
