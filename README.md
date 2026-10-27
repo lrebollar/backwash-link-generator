@@ -6,12 +6,13 @@ Everything here is free to run. You do not need to know how to code to use it.
 
 ## How it works
 
-- The files live in this GitHub repository. The website is the `docs/` folder. It is a set of plain files.
-- The admin panel saves your changes to this GitHub repository for you.
-- A GitHub Action copies every change to GitLab automatically.
-- GitLab Pages publishes the website for free. There is no server to pay for or maintain.
-- Every save goes live in about 1–3 minutes.
-- Each record is one small file in `docs/data/albums/`. Its cover picture is in `docs/data/covers/`.
+- Your records and store settings live in a **Google Sheet**. The sheet has one row for each record. It also has a tab for your store settings.
+- The sheet is shared so that **anyone with the link can view it**. The public pages read it directly. The sheet holds nothing secret. Only you can change it.
+- The admin panel saves your changes to the sheet. It does this through a small Google Apps Script attached to the sheet. The admin panel is protected by a password.
+- You can also edit the sheet by hand. See **Edit the sheet by hand** below.
+- Changes to records and store settings show on the website within about a minute.
+- The website is the `docs/` folder in this GitHub repository. It is a set of plain files. A GitHub Action copies code changes to GitLab automatically. GitLab Pages publishes the website for free. There is no server to pay for or maintain.
+- The website code only changes when the code changes. Saving records or store settings does not touch GitHub or GitLab, so it uses no publishing minutes.
 - The admin panel is at `<your site>/admin/`. You use it to add and edit records and store settings.
 - The sticker only holds a link, like `https://backwash-link-generator-xxxxxx.gitlab.io/?a=nevermind`. Your real address is shown in GitLab (see Step 1). You can change a record's page at any time without touching its sticker. Only a change of the site address would need new stickers, so pick the final address first (see Step 1).
 
@@ -21,7 +22,7 @@ Do these steps once. Ask someone to help you if a step is unclear.
 
 ### Step 1: Put the site online
 
-The website is published with **GitLab Pages**. Your GitHub repository stays the place where you save changes. A GitHub Action copies it to GitLab for you.
+The website is published with **GitLab Pages**. Your GitHub repository keeps the website code. A GitHub Action copies code changes to GitLab for you.
 
 The code must be on the `main` branch first. If there is an open pull request, merge it.
 
@@ -35,18 +36,24 @@ The code must be on the `main` branch first. If there is an open pull request, m
    - Click **Create project**.
    - Write down the project path shown in its address after `gitlab.com/`. It looks like `your-username/backwash-link-generator`.
 3. Create a GitLab token. This lets GitHub copy your changes to GitLab. Treat it like a password.
-   - Click your avatar (top right), then **Edit profile**, then **Access tokens**, then **Add new token**.
+   GitLab offers two kinds of token. Use the **fine-grained** one if you see it: it can only push to this one project.
+   - Click your avatar, then **Edit profile**, then **Personal access tokens**.
+   - Click the arrow on the **Generate token** button and choose **Fine-grained token**.
    - Name: `GitHub mirror`
-   - Expiration date: choose the latest date allowed. It can be at most 1 year away. Set a reminder to make a new token before it expires.
-   - Select scope: **write_repository**
-   - Click **Create token**. Copy it now. It starts with `glpat-`. GitLab shows it only once.
+   - Expiration date: choose the latest date allowed (usually 1 year). Set a reminder to make a new token before it expires.
+   - Access: choose only the project `backwash-link-generator` (not all your groups and projects).
+   - Permissions: find the **Code** resource and tick **Push** (you may also tick **Download**). Leave every other permission empty.
+   - Create the token. Copy it now. It starts with `glpat-`. GitLab shows it only once.
+   - You may not be able to change the permissions later. If you made a mistake, delete the token and make a new one.
+
+   **If there is no "Fine-grained token" option**, or the copy in item 5 fails with an authentication error: make a classic token instead. Click **Generate token** (or **Add new token**), give it the same name and expiration date, tick only **write_repository**, leave every other box empty, and create it. It works the same way, but it can write to every GitLab project on your account.
 4. Give GitHub the secrets.
    - On github.com, open this repository. Click **Settings**, then **Secrets and variables**, then **Actions**.
    - Click **New repository secret**.
    - Name: `GITLAB_TOKEN`. Secret: paste the `glpat-` token. Click **Add secret**.
    - Click **New repository secret** again.
    - Name: `GITLAB_PROJECT`. Secret: the project path from item 2 above, for example `your-username/backwash-link-generator`. Type only the path, not the web address that starts with `https://gitlab.com/`. Click **Add secret**.
-5. Start the first copy. On github.com, open this repository. Click the **Actions** tab. Click **Mirror to GitLab**. Click **Run workflow**. Check that the branch box says `main`, then click **Run workflow** again. The run turns green in under a minute. After this, it runs by itself on every change.
+5. Start the first copy. On github.com, open this repository. Click the **Actions** tab. Click **Mirror to GitLab**. Click **Run workflow**. Check that the branch box says `main`, then click **Run workflow** again. The run turns green in under a minute. After this, it runs by itself every time the code changes.
 6. Find your site address. On gitlab.com, open the project. Click **Build**, then **Pipelines**. Wait until the **pages** job shows that it has passed. Then click **Deploy**, then **Pages**. Your site address is shown there.
    - Optional: untick **Use unique domain** on that page. Your address then becomes `https://<your-username>.gitlab.io/backwash-link-generator/`.
    - Choose your final address before you write any stickers.
@@ -56,52 +63,63 @@ The code must be on the `main` branch first. If there is an open pull request, m
 **If something goes wrong:**
 
 - The **Mirror to GitLab** run is red and says "Add the GITLAB_PROJECT and GITLAB_TOKEN secrets": do item 4 above again.
-- The run is red and mentions an authentication error: the token is wrong, expired, or does not have the **write_repository** scope. Make a new token (item 3 above), then update the **GITLAB_TOKEN** secret (item 4 above).
+- The run is red and mentions an authentication error: the token is wrong or expired, or it lacks push access (**Code → Push** on a fine-grained token, or the **write_repository** scope on a classic token). Make a new token (item 3 above), then update the **GITLAB_TOKEN** secret (item 4 above).
 - The run says the push was rejected: the GitLab project was created with a README. Delete the project in GitLab, then create it again without the README (item 2 above). Or ask for help.
 - GitLab asks you to verify your account before the **pages** job runs: verify it (item 1 above).
 - The run is red and says the project or repository was not found: GITLAB_PROJECT must be only the project path from item 2 above, for example your-username/backwash-link-generator. Update the GITLAB_PROJECT secret (item 4 above).
 - No **pages** job appears under **Build**, then **Pipelines**: in GitLab open **Settings**, then **Repository**, then **Branch defaults** and check that the default branch is `main`.
 - The site address shows Not Found after the **pages** job passed: finish item 7 (**Pages** set to **Everyone**) and wait a few minutes.
 
-### Step 2: Create a GitHub access token
+### Step 2: Create the Google Sheet
 
-The token lets the admin panel save changes to this repository. Treat it like a password. Anyone with it can change your site.
+The sheet holds your records and store settings. You need a free Google account.
 
-1. Go to github.com. Click your profile picture. Click **Settings**.
-2. In the left menu, scroll down. Click **Developer settings**.
-3. Click **Personal access tokens**. Then click **Fine-grained tokens**.
-4. Click **Generate new token**.
-5. Type `Backwash admin` in the name box.
-6. Set **Expiration** to the longest option you can pick. When it expires, make a new token and paste it into the admin panel.
-7. Under **Repository access**, choose **Only select repositories**. Pick `backwash-link-generator`.
-8. Under **Permissions**, open **Repository permissions**. Find **Contents** and set it to **Read and write**. The **Metadata** permission is added for you as read-only.
-9. Click **Generate token**.
-10. Copy the token. It starts with `github_pat_`. GitHub shows it only once.
+1. On github.com, open the file `google-sheet/backwash-records-template.xlsx`. Click **Download raw file**. The file saves to your computer.
+2. Go to drive.google.com. Click **New**, then **File upload**, then pick the file you downloaded. When it has uploaded, double-click it. Then click **File**, then **Save as Google Sheets**. Use this new Google Sheets copy from now on.
+3. Click **Share**. Under **General access**, choose **Anyone with the link**. Make sure the role is **Viewer**. Click **Done**. This is needed, because the public pages read the sheet. Nothing secret is in it.
+4. Click **Extensions**, then **Apps Script**. Delete the code shown there. On github.com, open the file `google-sheet/Code.gs`. Click **Raw**. Select all the text (**Ctrl + A**, or **Command + A** on a Mac) and copy it (**Ctrl + C**, or **Command + C**). Go back to the Apps Script editor and paste it (**Ctrl + V**, or **Command + V**). Click **Save** (the disk icon). If asked for a name, type `Backwash admin`.
+5. Click **Project Settings** (gear icon). Find **Script Properties**, then click **Add script property**. In **Property**, type `ADMIN_PASSWORD`. In **Value**, type a password you choose. Click **Save script properties**. Write this password down. You will type it in the admin panel.
+6. Click the **Editor** icon (it looks like `<>`) to go back to the code. In the toolbar, open the function menu and choose **setup**. Click **Run**. If asked, click **Review permissions**, then choose your Google account. If you see "Google hasn't verified this app", click **Advanced**, then **Go to Backwash admin (unsafe)**, then **Allow**. This is safe, because it is your own script. The **Execution log** at the bottom says what **setup** did.
+7. Click **Deploy**, then **New deployment**. Click the gear icon next to **Select type**, then choose **Web app**. Set **Execute as** to **Me**. Set **Who has access** to **Anyone**. The password still protects the admin actions. Click **Deploy**. If asked, authorize again. Then copy the **Web app URL**. It ends in `/exec`.
+8. Tell the website where the sheet is. On github.com, open the file `docs/config.json`. Click the pencil icon (**Edit**). Put the sheet ID in `"sheetId"`. The sheet ID is the long part of the sheet's web address, between `/d/` and `/edit`. Put the Web app URL in `"appsScriptUrl"`. Only replace the text inside the quote marks. Click **Commit changes**. (Or send both to whoever helps you.) The site updates in 1–3 minutes after this one-time change.
+
+**If something goes wrong:**
+
+- The admin says "Wrong admin password." Check the password. It must match the **Value** you typed in item 5 exactly.
+- The admin says "The web app answered with a web page instead of data." Deploy again (item 7) and set **Who has access** to **Anyone**.
+- The public page shows the demo store or old data. Check that item 8 is done (`docs/config.json` is filled in). Check that item 3 is done (the sheet is shared with **Anyone with the link**).
+- You changed `Code.gs` later. Click **Deploy**, then **Manage deployments**. Click the pencil icon. Set **Version** to **New version**. Click **Deploy**. The Web app URL stays the same.
 
 ### Step 3: Connect the admin panel
 
 1. Open the admin panel on your phone or computer: `<your GitLab Pages address>/admin/`. For example: `https://backwash-link-generator-xxxxxx.gitlab.io/admin/`
 2. Tap or click the **Connection** tab.
-3. Paste your token into the **GitHub token** box.
-4. Check these values: **GitHub owner** `jadm333`, **Repository** `backwash-link-generator`, **Branch** `main`, **Site folder in the repository** `docs`, and **Public site URL** (your GitLab Pages address).
-5. Click **Save & test**.
+3. Check these boxes:
+   - **Apps Script web app URL**: this is filled in for you once `docs/config.json` has it (Step 2, item 8).
+   - **Admin password**: type the password you chose in Step 2, item 5.
+   - **Public site URL**: this is filled in for you.
+   - **Country for link lookup**: choose your country. It is used when Auto-fill looks up streaming links.
+4. Click **Save & test**. You should see a message that says **Connected to** and the name of your sheet.
+5. If a yellow box asks you to update `docs/config.json`, the box shows the text to put in that file. Click **Copy**, then do Step 2, item 8 with that text.
 
-The token is saved only in that browser on that device. On a new phone or computer, paste the token again.
+The connection details are saved only in that browser on that device. On a new phone or computer, fill in the boxes again.
 
 ### Step 4: Set up your store
 
 1. In the admin panel, tap the **Site settings** tab.
 2. Fill in the store name, tagline, **Catalog URL**, and social links. Empty boxes are hidden on the site.
 3. Choose a **Default design** (what new visitors see). To compare the designs, open `<your site>/themes.html`.
-4. Click **Save site settings**.
+4. Click **Save site settings**. The settings are saved in the **Site** tab of your Google Sheet.
 
 ### Step 5: Delete the demo record
 
-The site comes with a demo record so you can see how a page looks. After you have looked at it:
+The sheet comes with a demo record so you can see how a page looks. After you have looked at it:
 
 1. In the admin panel, tap **Albums**.
-2. Find the row that ends with (demo). Tap **Edit**. Then click **Delete album**.
+2. Find the record called **Backwash Sampler Vol. 1**. Its note says **Demo record — delete me**. Tap **Edit**. Then click **Delete album**.
 3. Click **OK** in the box that asks you to confirm.
+
+You can also delete the demo row in the **Albums** tab of the Google Sheet. Delete the whole row.
 
 ## Add a record and program a sticker
 
@@ -114,7 +132,9 @@ Do this for each record. It takes about 5 minutes per record.
 3. Click **Auto-fill**. It fills in the title, artist, cover and links to the other streaming services. It uses the free song.link service.
 4. Check every field. Fix anything that is wrong.
 5. Paste the link to this record in your catalog or online shop into the **Shop URL** box.
-6. Click **Save**.
+6. Click **Save**. The record is saved to your Google Sheet. The public page shows it within about a minute.
+
+**About cover pictures.** Auto-fill uses a link to the streaming service's picture. You can also upload your own picture. Uploaded pictures are saved in your Google Drive, in a folder called **Backwash Records covers**. Each picture is shared as a view-only link. The first upload may ask you to allow access to Google Drive. Allow it.
 
 ### Part 2: Write the sticker
 
@@ -140,6 +160,31 @@ The Sticker panel opens by itself after you save. For an older record, tap **Alb
 ### Part 3: Test it
 
 Tap the sticker with your phone. The record page should open. If it does not, write the sticker again.
+
+## Edit the sheet by hand
+
+You can also change records and store settings directly in the Google Sheet. Open the sheet on drive.google.com. Changes appear on the website within about a minute.
+
+**The Albums tab: one row for each record**
+
+- Each row is one record. To remove a record, delete its whole row.
+- Do not rename the tabs or the column headers. Do not move or swap columns. Column A must stay **slug**.
+- **slug** is the short name of the record page, for example `nevermind`. It is what the sticker link points to. Use only lowercase letters (a to z), numbers, and single dashes between words, for example `blue-album-2026`. Do not use spaces, capital letters or other symbols. Use at most 60 characters.
+- Do not change a slug after you write its sticker. The sticker would stop working.
+- **title** is required.
+- Links must start with `https://`. This includes the cover, the **shopUrl** and the streaming links. Copy the full address from your browser. The demo record is the only exception, and you will delete it.
+- **updatedAt**: leave it empty or as it is. The admin panel fills it in when it saves.
+- All cells are plain text. A year like 1991 stays as it is.
+- A row with an empty **slug** is ignored.
+
+**The Site tab: store settings**
+
+- Change only the **value** column (column B). Do not change the **key** column (column A).
+- The **notes** column (column C) explains each setting. The site ignores it.
+- An empty value hides that item on the site. For button words, an empty value means the normal wording is used.
+- **theme**: type one of these words: `ink`, `paper`, `fire`, `sun` or `cover`. See **Change the design**.
+- **themeSwitcher**: type `TRUE` to show the **Change design** button. Type `FALSE` to hide it.
+- The **How to use** tab has short notes. The site ignores it.
 
 ## Which NFC stickers to buy
 
@@ -173,7 +218,7 @@ If you do not see the button, it is turned off. See **Lock the design** below.
 2. Choose a **Default design**.
 3. Click **Save site settings**.
 
-New visitors, and phones that have not picked a design, see this design. Visitors who already picked one keep their pick. To make everyone see the store design, lock it (see below).
+New visitors, and phones that have not picked a design, see this design. Visitors who already picked one keep their pick. To make everyone see the store design, lock it (see below). The choice is saved in the **Site** tab of the Google Sheet, in the row called `theme`.
 
 ### Lock the design
 
@@ -181,7 +226,7 @@ New visitors, and phones that have not picked a design, see this design. Visitor
 2. Untick **Show the 'Change design' button on the public pages**.
 3. Click **Save site settings**.
 
-The button disappears. Every page then uses the store's default design, even on phones that picked another one. To show the button again, tick the box and click **Save site settings**.
+The button disappears. Every page then uses the store's default design, even on phones that picked another one. To show the button again, tick the box and click **Save site settings**. The setting is saved in the **Site** tab of the Google Sheet, in the row called `themeSwitcher`.
 
 ### Preview a record in another design
 
@@ -193,34 +238,38 @@ Use `&theme=ink`, `&theme=paper`, `&theme=sun` or `&theme=cover` to try the othe
 
 ## Good to know
 
-- **Changes go live in about 1–3 minutes.** Some phones keep an old copy of a page for up to about 10 minutes. Wait a little, or reload the page.
-- **GitLab's free plan includes 400 CI minutes a month.** CI minutes are the publishing time. Each save uses roughly 1 minute or less.
-- **The GitLab token expires.** A token lasts at most 1 year. When the **Mirror to GitLab** run fails, make a new token (Step 1, item 3). Then update the **GITLAB_TOKEN** secret on github.com: **Settings**, then **Secrets and variables**, then **Actions**, then **GITLAB_TOKEN**, then **Update secret**.
-- **If a change does not appear after a few minutes,** open the **Actions** tab on github.com. A red **Mirror to GitLab** run means the copy to GitLab failed (the admin panel still says Saved, because the save to GitHub worked). GitHub can also email you about failed runs, depending on your notification settings.
+- **Changes to records and store settings show within about a minute.** Some phones keep an old copy of a page for up to about 10 minutes. Wait a little, or reload the page.
 - **Auto-fill has a limit.** It allows about 10 lookups per minute. If you see "Too many lookups", wait a minute and try again.
 - **If Auto-fill fails,** paste the streaming links into the link boxes by hand.
-- **Every save is kept.** Each save is a commit in GitHub's history. If you need an older version of a file, you can find it there.
-- **Covers are square.** They are saved at up to 800 × 800 pixels (smaller if the original picture is smaller) in `docs/data/covers/`.
-- **Keep your tokens private.** Each token works like a password. If you think one leaked, delete it and make a new one. The GitHub token is on github.com under **Settings**, then **Developer settings**, then **Personal access tokens**. The GitLab token is on gitlab.com under your avatar, then **Edit profile**, then **Access tokens**.
+- **Every change can be undone.** For records and store settings, open the Google Sheet. Click **File**, then **Version history**. Choose an older version and restore it. Code changes are kept in GitHub's history.
+- **Google's limits are far above a record store's needs.** Google sets limits on free sheets and scripts. A record store uses far less than those limits.
+- **Covers are square.** Uploaded covers are saved at up to 800 × 800 pixels (smaller if the original picture is smaller).
+- **If a code change does not appear after a few minutes,** open the **Actions** tab on github.com. A red **Mirror to GitLab** run means the copy to GitLab failed. GitHub can also email you about failed runs, depending on your notification settings.
+- **The GitLab token expires.** A token lasts at most 1 year. When the **Mirror to GitLab** run fails, make a new token (Step 1, item 3). Then update the **GITLAB_TOKEN** secret on github.com: **Settings**, then **Secrets and variables**, then **Actions**, then **GITLAB_TOKEN**, then **Update secret**.
+- **Keep your passwords and tokens private.** Each one works like a password. If you think one leaked, delete it and make a new one.
+  - To change the admin password, open the Google Sheet, click **Extensions**, then **Apps Script**. Click **Project Settings** (gear icon), then **Script Properties**. Change the value of **ADMIN_PASSWORD**, then click **Save script properties**. You do not need to deploy again. Then type the new password in the **Connection** tab of the admin panel.
+  - The GitLab token is on gitlab.com under your avatar, then **Edit profile**, then **Access tokens**.
 
 ## Files
 
-You only need to change records and store settings, and you do that in the admin panel. Leave the other files alone unless you know how to code.
+You only need to change records and store settings. You do that in the admin panel or in the Google Sheet. Leave the other files alone unless you know how to code.
 
 ```
-docs/index.html                          the public record page (what customers see)
-docs/assets/js/page.js                   builds the record page
-docs/assets/css/base.css                 layout and structure
-docs/assets/css/themes/                  one file for each design
-docs/data/site.json                      store name, links and design
-docs/data/albums/                        one file for each record
-docs/data/covers/                        cover pictures (square, up to 800 x 800)
-docs/admin/                              the admin panel
-docs/themes.html                         compare the designs
-brand/                                   original logo files
-tools/                                   scripts that made the logos and icons
-.gitlab-ci.yml                           tells GitLab how to publish the site
-.github/workflows/mirror-to-gitlab.yml   copies every change from GitHub to GitLab
+docs/index.html                              the public record page (what customers see)
+docs/assets/js/page.js                       builds the record page
+docs/assets/js/data.js                       reads the Google Sheet for the public pages
+docs/assets/css/base.css                     layout and structure
+docs/assets/css/themes/                      one file for each design
+docs/config.json                             where the site finds your Google Sheet
+docs/data/                                   sample data used until a Google Sheet is connected
+docs/admin/                                  the admin panel
+docs/themes.html                             compare the designs
+google-sheet/Code.gs                         the Apps Script that the admin panel saves through
+google-sheet/backwash-records-template.xlsx  the Google Sheet template (Step 2)
+brand/                                       original logo files
+tools/                                       scripts that made the logos and icons
+.gitlab-ci.yml                               tells GitLab how to publish the site
+.github/workflows/mirror-to-gitlab.yml       copies code changes from GitHub to GitLab
 ```
 
 ## Run it on your computer (optional)
@@ -232,5 +281,5 @@ You need Python 3 installed.
 1. On github.com, open this repository. Click the green **Code** button, then **Download ZIP**. Unzip it.
 2. Open Terminal (Mac) or Command Prompt (Windows). Go to the unzipped folder.
 3. Type this and press Enter: `python3 -m http.server 8000 -d docs` (on Windows, type `python` instead of `python3`).
-4. Open http://localhost:8000/?a=demo in your web browser.
+4. Open http://localhost:8000/?a=demo in your web browser. If you deleted the demo record in Step 5, use the slug of one of your own records instead, for example `?a=nevermind`.
 5. To stop the preview, go back to the Terminal and press `Ctrl + C`.
