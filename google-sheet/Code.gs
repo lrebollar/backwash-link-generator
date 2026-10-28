@@ -44,8 +44,8 @@
  *  UPDATING THIS SCRIPT LATER (the Web app URL stays the same)
  *  1. Paste the new version into the editor and save.
  *  2. Choose "setup" from the function menu and click Run, then Allow if Google
- *     asks for a new permission (Auto-fill needs one to contact Spotify and
- *     Apple). Running setup again is always safe.
+ *     asks for a new permission (Auto-fill needs one to contact Spotify, Apple
+ *     and Deezer). Running setup again is always safe.
  *  3. Click Deploy, Manage deployments, the pencil icon, set Version to
  *     "New version", and click Deploy. Do NOT choose "New deployment" again:
  *     that creates a new URL.
@@ -60,8 +60,8 @@
  *        ?action=album&slug=<slug>  -> one album
  *  - POST (JSON body {action, password, ...}): ping, listAlbums, getAlbum,
  *        saveAlbum, deleteAlbum, getSite, saveSite, uploadCover, autofill.
- *        autofill {url, country} reads one Spotify album link and finds the
- *        album's other streaming links.
+ *        autofill {url, country} reads one Spotify, Apple Music or Deezer
+ *        album link and finds the same album on Apple Music and Deezer.
  *  Every answer is JSON: {ok:true, ...} or {ok:false, code, error}.
  *  Codes: AUTH, SETUP, BAD_REQUEST, NOT_FOUND, EXISTS, CONFLICT, RATE_LIMIT, SERVER.
  */
@@ -72,7 +72,7 @@
 
 const ALBUMS_SHEET = 'Albums';
 const SITE_SHEET = 'Site';
-const API_VERSION = 3;
+const API_VERSION = 4;
 
 // Album columns in template order. Headers are matched BY NAME, so extra
 // columns are tolerated and the order of these may differ in a real sheet.
@@ -122,6 +122,11 @@ const SLUG_MAX_LENGTH = 60;
 // Spotify album links: open.spotify.com/album/<id> (also with /intl-xx/ or /embed/
 // before "album", and with ?si=... after the id) or spotify:album:<id>.
 const SPOTIFY_ALBUM_RE = /^(?:https?:\/\/open\.spotify\.com\/(?:intl-[a-z-]+\/)?(?:embed\/)?album\/|spotify:album:)([A-Za-z0-9]{22})(?:[/?#]|$)/i;
+// Apple Music album links: music.apple.com/<country>/album/<name>/<id> (also without the
+// name or the country, and the older itunes.apple.com/.../id<id>).
+const APPLE_ALBUM_RE = /^https?:\/\/(?:music|itunes|geo\.music)\.apple\.com\/(?:([a-z]{2})\/)?album\/(?:[^/?#]*\/)?(?:id)?(\d+)(?:[/?#]|$)/i;
+// Deezer album links: www.deezer.com/<language>/album/<id> (also without the language).
+const DEEZER_ALBUM_RE = /^https?:\/\/(?:www\.)?deezer\.com\/(?:[a-z]{2}(?:-[a-z]{2})?\/)?album\/(\d+)(?:[/?#]|$)/i;
 
 const ADMIN_PASSWORD_PROPERTY = 'ADMIN_PASSWORD';
 const COVERS_FOLDER_PROPERTY = 'COVERS_FOLDER_ID';
@@ -131,15 +136,15 @@ const AUTH_DELAY_MS = 1000;
 const COVER_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
 const COVER_MAX_BASE64_CHARS = 14 * 1024 * 1024; // about 10 MB of image data
 const SPOTIFY_ALBUM_URL = 'https://open.spotify.com/album/';
+const SPOTIFY_EMBED_URL = 'https://open.spotify.com/embed/album/';
 const SPOTIFY_OEMBED_URL = 'https://open.spotify.com/oembed?url=';
 const ITUNES_SEARCH_URL = 'https://itunes.apple.com/search';
-// Amazon Music website per store country. Other countries use music.amazon.com.
-const AMAZON_MUSIC_HOSTS = {
-  US: 'music.amazon.com', GB: 'music.amazon.co.uk', DE: 'music.amazon.de', FR: 'music.amazon.fr',
-  IT: 'music.amazon.it', ES: 'music.amazon.es', JP: 'music.amazon.co.jp', CA: 'music.amazon.ca',
-  AU: 'music.amazon.com.au', MX: 'music.amazon.com.mx', BR: 'music.amazon.com.br', IN: 'music.amazon.in',
-};
+const ITUNES_LOOKUP_URL = 'https://itunes.apple.com/lookup';
+const DEEZER_ALBUM_URL = 'https://www.deezer.com/album/';
+const DEEZER_API_URL = 'https://api.deezer.com/';
 const MSG_RATE_LIMIT = 'Too many lookups — wait a minute and try again.';
+// The album details Auto-fill looks for.
+const ALBUM_INFO_FIELDS = ['title', 'artist', 'year', 'label', 'cover'];
 
 // The demo album written by setup() when the Albums tab has no albums yet.
 const DEMO_ALBUM = {
@@ -219,10 +224,36 @@ function isValidSlug(slug) {
   return typeof slug === 'string' && slug.length <= SLUG_MAX_LENGTH && SLUG_RE.test(slug);
 }
 
-// The album ID in a Spotify album link, or '' when the text is not one.
-function spotifyAlbumId(link) {
-  const match = SPOTIFY_ALBUM_RE.exec(cleanString(link));
-  return match ? match[1] : '';
+// The service and album ID of a Spotify, Apple Music or Deezer album link, or null when the
+// text is not one. Apple Music links also give their store country (or '').
+function albumLinkSource(link) {
+  const text = cleanString(link);
+  let match = SPOTIFY_ALBUM_RE.exec(text);
+  if (match) return { service: 'spotify', id: match[1] };
+  match = APPLE_ALBUM_RE.exec(text);
+  if (match) return { service: 'appleMusic', id: match[2], country: (match[1] || '').toUpperCase() };
+  match = DEEZER_ALBUM_RE.exec(text);
+  if (match) return { service: 'deezer', id: match[1] };
+  return null;
+}
+
+// The 4-digit year at the start of a date such as "1991-09-24T07:00:00Z", or ''.
+function yearOf(date) {
+  return (/^\d{4}/.exec(cleanString(date)) || [''])[0];
+}
+
+function httpsOrEmpty(url) {
+  const text = cleanString(url);
+  return /^https:\/\//i.test(text) ? text : '';
+}
+
+// `album` with its empty ALBUM_INFO_FIELDS filled in from `extra` (which may be null).
+function fillMissing(album, extra) {
+  const out = Object.assign({}, album);
+  ALBUM_INFO_FIELDS.forEach(function (field) {
+    if (!cleanString(out[field]) && extra && cleanString(extra[field])) out[field] = cleanString(extra[field]);
+  });
+  return out;
 }
 
 // Turns HTML character references (&amp;, &#39;, &#x27;, ...) back into characters.
@@ -263,12 +294,120 @@ function spotifyAlbumInfo(meta) {
     ? intro.slice(afterSpotify < 0 ? 0 : afterSpotify + 'Spotify'.length).replace(/^[.!:\s]+/, '')
     : '';
   const yearFromText = parts.filter(function (part) { return /^\d{4}$/.test(part.trim()); })[0] || '';
-  const releaseYear = (/^\d{4}/.exec(cleanString(meta['music:release_date'])) || [''])[0];
   return {
     title: cleanString(meta['og:title']),
     artist: cleanString(meta['music:musician_description']) || artistFromText.trim(),
-    year: releaseYear || yearFromText.trim(),
-    cover: /^https:\/\//i.test(cleanString(meta['og:image'])) ? cleanString(meta['og:image']) : '',
+    year: yearOf(meta['music:release_date']) || yearFromText.trim(),
+    label: '',
+    cover: httpsOrEmpty(meta['og:image']),
+  };
+}
+
+// Album details from a whole Spotify album page: its meta tags, and its <title>
+// ("<album> - Album by <artist> | Spotify") when the meta tags lack the title or artist.
+function spotifyPageInfo(html) {
+  const info = spotifyAlbumInfo(htmlMeta(html));
+  const tag = /<title[^>]*>([^<]*)<\/title>/i.exec(String(html));
+  const parts = tag
+    ? /^(.+?) - (?:Album|Single|EP|Compilation) by (.+?) \| Spotify$/i.exec(decodeHtml(tag[1]).trim())
+    : null;
+  if (parts) {
+    if (!info.title) info.title = parts[1];
+    if (!info.artist) info.artist = parts[2];
+  }
+  return info;
+}
+
+// The first object inside `value` (searched depth first) for which test(object) is true, or null.
+function findObject(value, test, depth) {
+  const level = depth || 0;
+  if (!value || typeof value !== 'object' || level > 15) return null;
+  if (!Array.isArray(value) && test(value)) return value;
+  const keys = Object.keys(value);
+  for (let i = 0; i < keys.length; i++) {
+    const found = findObject(value[keys[i]], test, level + 1);
+    if (found) return found;
+  }
+  return null;
+}
+
+// The https URL of the widest image in a list of {url, width or maxWidth}, or ''.
+function largestImage(images) {
+  let best = '';
+  let bestWidth = -1;
+  (Array.isArray(images) ? images : []).forEach(function (image) {
+    const url = httpsOrEmpty(image && image.url);
+    const width = Number(image && (image.width || image.maxWidth)) || 0;
+    if (url && width > bestWidth) {
+      best = url;
+      bestWidth = width;
+    }
+  });
+  return best;
+}
+
+// Album details from Spotify's embed page (open.spotify.com/embed/album/<id>). The page keeps
+// the album as JSON in its <script id="__NEXT_DATA__"> tag; `id` picks out the album there.
+function spotifyEmbedInfo(html, id) {
+  const empty = { title: '', artist: '', year: '', label: '', cover: '' };
+  const script = /<script\b[^>]*\bid=["']__NEXT_DATA__["'][^>]*>([\s\S]*?)<\/script>/i.exec(String(html));
+  const data = script ? parseJsonObject(script[1]) : null;
+  const entity = findObject(data, function (object) {
+    return object.uri === 'spotify:album:' + id && Boolean(object.name || object.title);
+  });
+  if (!entity) return empty;
+  const artists = (Array.isArray(entity.artists) ? entity.artists : [])
+    .map(function (artist) { return cleanString(artist && artist.name); })
+    .filter(Boolean);
+  const release = entity.releaseDate;
+  const cover = entity.coverArt && entity.coverArt.sources;
+  return {
+    title: cleanString(entity.name || entity.title),
+    artist: artists.join(', ') || cleanString(entity.subtitle),
+    year: yearOf(release && typeof release === 'object' ? release.isoString || release.date : release || entity.release_date),
+    label: '',
+    cover: largestImage(cover) || largestImage(entity.visualIdentity && entity.visualIdentity.image) || largestImage(entity.images),
+  };
+}
+
+// The record label in a copyright line: "℗ 2019 Columbia Records, a division of Sony" ->
+// "Columbia Records". '' when the line has another shape.
+function labelFromCopyright(text) {
+  const label = cleanString(text)
+    .replace(/^(?:[℗©]|\([pc]\)|\d{4}(?:\s*[-–]\s*\d{4})?|[\s,.])+/i, '')
+    .split(/,| under (?:exclusive )?licen[cs]e/i)[0]
+    .trim();
+  return label.length <= 60 && !/[℗©]|\([pc]\)/i.test(label) ? label : '';
+}
+
+// Album details from one iTunes Search or Lookup API result, plus its Apple Music link
+// (without the "?uo=4" tracking part). Apple only has a copyright line, which gives the label.
+function appleAlbumInfo(result) {
+  const r = result || {};
+  return {
+    title: cleanString(r.collectionName).replace(/\s+-\s+(?:single|ep)$/i, ''),
+    artist: cleanString(r.artistName),
+    year: yearOf(r.releaseDate),
+    label: labelFromCopyright(r.copyright),
+    // artworkUrl100 is 100 x 100 pixels; the same address with 600x600 gives a bigger picture.
+    cover: httpsOrEmpty(r.artworkUrl100).replace(/\/\d+x\d+(bb)?\.(jpg|png|webp)$/i, '/600x600bb.$2'),
+    url: httpsOrEmpty(cleanString(r.collectionViewUrl).split('?')[0]),
+  };
+}
+
+// Album details from the Deezer API (an album, or one result of an album search; search
+// results have no label or release date), plus its Deezer link and ID.
+function deezerAlbumInfo(data) {
+  const d = data || {};
+  const id = /^\d+$/.test(cleanString(d.id)) ? cleanString(d.id) : '';
+  return {
+    title: cleanString(d.title),
+    artist: cleanString(d.artist && d.artist.name),
+    year: yearOf(d.release_date),
+    label: cleanString(d.label),
+    cover: httpsOrEmpty(d.cover_xl) || httpsOrEmpty(d.cover_big),
+    url: id ? DEEZER_ALBUM_URL + id : '',
+    id: id,
   };
 }
 
@@ -301,23 +440,33 @@ function artistScore(spotifyArtist, appleArtist) {
   return first && (' ' + theirs + ' ').indexOf(' ' + first + ' ') >= 0 ? 1 : 0;
 }
 
-// The iTunes Search API result for the same album as `album` ({title, artist, year}), or null.
-// The title and artist must match. Exact titles beat titles that only match without
-// (...) parts; then the closer artist and the same year win; then iTunes' own order.
-function pickAppleAlbum(results, album) {
+// The search result ({title, artist, year, url}) that is the same album as `album`
+// ({title, artist, year}), or null. The title and artist must match. Exact titles beat titles
+// that only match without (...) parts; then the closer artist and the same year win; then the
+// service's own order. When `album` has no artist, a result with the exact title is taken only
+// if every result with that title has the same artist.
+function pickAlbum(results, album) {
   const title = titleKey(album.title);
-  if (!title || !nameKey(album.artist)) return null;
+  if (!title) return null;
+  const usable = (Array.isArray(results) ? results : []).filter(function (result) {
+    return result && /^https:\/\//i.test(cleanString(result.url));
+  });
+  if (!nameKey(album.artist)) {
+    const sameTitle = usable.filter(function (result) { return titleKey(result.title) === title; });
+    const artists = sameTitle.map(function (result) { return nameKey(result.artist); });
+    const oneArtist = artists[0] && artists.every(function (artist) { return artist === artists[0]; });
+    return oneArtist ? sameTitle[0] : null;
+  }
   const bare = bareTitleKey(album.title);
   let best = null;
   let bestScore = 0;
-  (Array.isArray(results) ? results : []).forEach(function (result) {
-    if (!result || !/^https:\/\//i.test(cleanString(result.collectionViewUrl))) return;
-    const artist = artistScore(album.artist, result.artistName);
+  usable.forEach(function (result) {
+    const artist = artistScore(album.artist, result.artist);
     let sameTitle = 0;
-    if (titleKey(result.collectionName) === title) sameTitle = 2;
-    else if (bare && bareTitleKey(result.collectionName) === bare) sameTitle = 1;
+    if (titleKey(result.title) === title) sameTitle = 2;
+    else if (bare && bareTitleKey(result.title) === bare) sameTitle = 1;
     if (!artist || !sameTitle) return;
-    const sameYear = album.year && cleanString(result.releaseDate).slice(0, 4) === album.year ? 1 : 0;
+    const sameYear = album.year && result.year === album.year ? 1 : 0;
     const score = sameTitle * 10 + artist * 2 + sameYear;
     if (score > bestScore) {
       best = result;
@@ -325,11 +474,6 @@ function pickAppleAlbum(results, album) {
     }
   });
   return best;
-}
-
-// The Apple Music album link of an iTunes Search API result, without the "?uo=4" tracking part.
-function appleAlbumUrl(result) {
-  return cleanString(result.collectionViewUrl).split('?')[0];
 }
 
 // The JSON object in `text`, or null when it is not one.
@@ -340,17 +484,6 @@ function parseJsonObject(text) {
   } catch (err) {
     return null;
   }
-}
-
-// Links that open a search for the album on services where the exact album can't be looked up.
-function albumSearchLinks(album, country) {
-  const words = cleanString(album.artist + ' ' + album.title).replace(/[\s/]+/g, ' ');
-  const query = encodeURIComponent(words);
-  return {
-    appleMusic: 'https://music.apple.com/' + country.toLowerCase() + '/search?term=' + query,
-    youtubeMusic: 'https://music.youtube.com/search?q=' + query,
-    amazonMusic: 'https://' + (AMAZON_MUSIC_HOSTS[country] || AMAZON_MUSIC_HOSTS.US) + '/search/' + query,
-  };
 }
 
 function normalizeTheme(value) {
@@ -915,12 +1048,14 @@ function getCoversFolder_() {
 }
 
 // ============================================================================
-// Auto-fill. The admin panel sends one Spotify album link; this reads the album from
-// Spotify and finds it on Apple Music (browsers can't call these services: no CORS).
-// It writes nothing, so it runs without the lock.
+// Auto-fill. The admin panel sends one Spotify, Apple Music or Deezer album link; this reads
+// the album from that service and finds it on Apple Music and Deezer (browsers can't call
+// these services: no CORS). It writes nothing, so it runs without the lock.
 // ============================================================================
 
 const MSG_SPOTIFY_NOT_FOUND = "Spotify doesn't know this album. Check the link.";
+const MSG_APPLE_NOT_FOUND = "Apple Music doesn't know this album in this country. Check the link.";
+const MSG_DEEZER_NOT_FOUND = "Deezer doesn't know this album. Check the link.";
 
 // UrlFetchApp.fetch that returns HTTP errors instead of throwing them. `service` names
 // the site in the error shown when it can't be reached.
@@ -935,74 +1070,178 @@ function fetchFrom_(service, url, options) {
   }
 }
 
-// Title, artist, year and cover of one Spotify album, read from its public page. When the
-// page has no details, Spotify's oEmbed answer gives at least the title and cover.
+function isSuccess_(status) {
+  return status >= 200 && status <= 299;
+}
+
+// GETs a JSON API: {status, data}, where data is the JSON object or null.
+function getJson_(service, url) {
+  const response = fetchFrom_(service, url);
+  const status = response.getResponseCode();
+  return { status: status, data: isSuccess_(status) ? parseJsonObject(response.getContentText()) : null };
+}
+
+// The text of a web page, or '' when it can't be fetched. For optional extra details.
+function pageText_(url) {
+  try {
+    const response = UrlFetchApp.fetch(url, { muteHttpExceptions: true, headers: { 'Accept-Language': 'en' } });
+    if (isSuccess_(response.getResponseCode())) return response.getContentText();
+    Logger.log(url + ' answered HTTP ' + response.getResponseCode() + '.');
+  } catch (err) {
+    Logger.log(url + ' failed: ' + messageOf(err));
+  }
+  return '';
+}
+
+// Title, artist, year and cover of one Spotify album. Spotify's public album page has them in
+// its meta tags, but it sometimes refuses Google's servers; the embed page then gives them, and
+// Spotify's oEmbed answer gives at least the title and cover.
 function spotifyAlbum_(id) {
   const link = SPOTIFY_ALBUM_URL + id;
   const page = fetchFrom_('Spotify', link, { headers: { 'Accept-Language': 'en' } });
   const pageStatus = page.getResponseCode();
   if (pageStatus === 404) throw apiError('NOT_FOUND', MSG_SPOTIFY_NOT_FOUND);
-  if (pageStatus >= 200 && pageStatus <= 299) {
-    const album = spotifyAlbumInfo(htmlMeta(page.getContentText()));
-    if (album.title) return album;
+  let album = isSuccess_(pageStatus)
+    ? spotifyPageInfo(page.getContentText())
+    : { title: '', artist: '', year: '', label: '', cover: '' };
+  if (!album.title || !album.artist || !album.year) {
+    album = fillMissing(album, spotifyEmbedInfo(pageText_(SPOTIFY_EMBED_URL + id), id));
   }
+  if (!album.title || !album.cover) {
+    const answer = getJson_('Spotify', SPOTIFY_OEMBED_URL + encodeURIComponent(link));
+    if (answer.data) {
+      album = fillMissing(album, { title: answer.data.title, cover: httpsOrEmpty(answer.data.thumbnail_url) });
+    } else if (!album.title) {
+      if (answer.status === 400 || answer.status === 404) throw apiError('NOT_FOUND', MSG_SPOTIFY_NOT_FOUND);
+      if (answer.status === 429) throw apiError('RATE_LIMIT', MSG_RATE_LIMIT);
+    }
+  }
+  if (!album.title) {
+    throw apiError('SERVER', "Spotify didn't send this album's details (HTTP " + pageStatus + '). Try again, or fill the fields by hand.');
+  }
+  album.url = link;
+  return album;
+}
 
-  const answer = fetchFrom_('Spotify', SPOTIFY_OEMBED_URL + encodeURIComponent(link));
-  const status = answer.getResponseCode();
-  if (status === 400 || status === 404) throw apiError('NOT_FOUND', MSG_SPOTIFY_NOT_FOUND);
-  if (status === 429) throw apiError('RATE_LIMIT', MSG_RATE_LIMIT);
-  const data = status >= 200 && status <= 299 ? parseJsonObject(answer.getContentText()) : null;
-  if (!data || !cleanString(data.title)) {
-    throw apiError('SERVER', "Spotify didn't send this album's details (HTTP " + status + '). Try again, or fill the fields by hand.');
+// One Apple Music album, read with the iTunes Lookup API.
+function appleLookup_(id, country) {
+  const answer = getJson_('Apple Music', ITUNES_LOOKUP_URL + '?id=' + id + '&country=' + country);
+  if (answer.status === 403 || answer.status === 429) throw apiError('RATE_LIMIT', MSG_RATE_LIMIT);
+  if (!answer.data) {
+    throw apiError('SERVER', "Apple Music didn't send this album's details (HTTP " + answer.status + '). Try again, or fill the fields by hand.');
   }
-  const cover = cleanString(data.thumbnail_url);
-  return { title: cleanString(data.title), artist: '', year: '', cover: /^https:\/\//i.test(cover) ? cover : '' };
+  const result = (Array.isArray(answer.data.results) ? answer.data.results : []).filter(function (r) {
+    return r && r.wrapperType === 'collection';
+  })[0];
+  if (!result) throw apiError('NOT_FOUND', MSG_APPLE_NOT_FOUND);
+  return appleAlbumInfo(result);
+}
+
+// One Deezer album, read with the Deezer API. Deezer reports errors inside a 200 answer:
+// code 800 means no such album, code 4 means too many requests.
+function deezerAlbum_(id) {
+  const answer = getJson_('Deezer', DEEZER_API_URL + 'album/' + id);
+  const error = answer.data && answer.data.error;
+  if (error && Number(error.code) === 800) throw apiError('NOT_FOUND', MSG_DEEZER_NOT_FOUND);
+  if (error && Number(error.code) === 4) throw apiError('RATE_LIMIT', MSG_RATE_LIMIT);
+  const album = deezerAlbumInfo(answer.data);
+  if (error || !album.title) {
+    throw apiError('SERVER', "Deezer didn't send this album's details (HTTP " + answer.status + '). Try again, or fill the fields by hand.');
+  }
+  return album;
+}
+
+// The search term for `album`: artist and title, or just the title when the artist is unknown.
+function searchTerm(album) {
+  return cleanString((album.artist ? album.artist + ' ' : '') + album.title);
 }
 
 // The Apple Music album that matches `album`, found with the iTunes Search API, or null.
-// Auto-fill works without it (Apple Music then gets a search link), so errors are only logged.
-function appleAlbum_(album, country) {
-  if (!album.artist) return null;
+// Auto-fill works without it, so errors are only logged.
+function appleSearch_(album, country) {
   const url = ITUNES_SEARCH_URL + '?media=music&entity=album&limit=25&country=' + country +
-    '&term=' + encodeURIComponent(album.artist + ' ' + album.title);
+    '&term=' + encodeURIComponent(searchTerm(album));
   try {
-    const response = UrlFetchApp.fetch(url, { muteHttpExceptions: true });
-    const status = response.getResponseCode();
-    if (status < 200 || status > 299) {
-      Logger.log('iTunes search answered HTTP ' + status + '.');
+    const answer = getJson_('Apple Music', url);
+    if (!answer.data) {
+      Logger.log('iTunes search answered HTTP ' + answer.status + '.');
       return null;
     }
-    const data = parseJsonObject(response.getContentText());
-    return pickAppleAlbum(data && data.results, album);
+    const results = Array.isArray(answer.data.results) ? answer.data.results : [];
+    return pickAlbum(results.map(appleAlbumInfo), album);
   } catch (err) {
     Logger.log('iTunes search failed: ' + messageOf(err));
     return null;
   }
 }
 
-// Auto-fill from one Spotify album link: the album's title, artist, year, cover and links.
-// Apple Music gets the album's own link when the iTunes search finds it. YouTube Music and
-// Amazon Music have no free search service, so they get search links. `searchLinks` lists
-// the platforms whose link is a search link.
+// The Deezer album that matches `album`, with its label and release date, or null.
+// Auto-fill works without it, so errors are only logged.
+function deezerSearch_(album) {
+  try {
+    const answer = getJson_('Deezer', DEEZER_API_URL + 'search/album?limit=25&q=' + encodeURIComponent(searchTerm(album)));
+    if (!answer.data || answer.data.error) {
+      Logger.log('Deezer search failed (HTTP ' + answer.status + '): ' + JSON.stringify(answer.data && answer.data.error));
+      return null;
+    }
+    const results = Array.isArray(answer.data.data) ? answer.data.data : [];
+    const match = pickAlbum(results.map(deezerAlbumInfo), album);
+    if (!match) return null;
+    // Search results have no label or release date; the album itself has them.
+    try {
+      return fillMissing(match, deezerAlbum_(match.id));
+    } catch (err) {
+      Logger.log('Deezer album ' + match.id + ' failed: ' + messageOf(err));
+      return match;
+    }
+  } catch (err) {
+    Logger.log('Deezer search failed: ' + messageOf(err));
+    return null;
+  }
+}
+
+// Auto-fill from one Spotify, Apple Music or Deezer album link: the album's title, artist, year,
+// label and cover, and its links on Spotify (only from a Spotify link: Spotify has no free
+// search), Apple Music and Deezer. Each service found fills in what the others left empty.
+// `source` names the service of the link that was sent.
 function autofillAction_(body) {
-  const id = spotifyAlbumId(body.url);
-  if (!id) {
-    throw apiError('BAD_REQUEST', 'Paste a Spotify album link, e.g. https://open.spotify.com/album/…');
+  const source = albumLinkSource(body.url);
+  if (!source) {
+    throw apiError('BAD_REQUEST', 'Paste an album link from Spotify, Apple Music or Deezer, e.g. https://open.spotify.com/album/…');
   }
   const country = cleanString(body.country).toUpperCase() || 'US';
   if (!/^[A-Z]{2}$/.test(country)) {
     throw apiError('BAD_REQUEST', 'The country must be a 2-letter code, for example US.');
   }
-  const album = spotifyAlbum_(id);
-  const links = albumSearchLinks(album, country);
-  links.spotify = SPOTIFY_ALBUM_URL + id;
-  let searchLinks = ['appleMusic', 'youtubeMusic', 'amazonMusic'];
-  const apple = appleAlbum_(album, country);
-  if (apple) {
-    links.appleMusic = appleAlbumUrl(apple);
-    searchLinks = ['youtubeMusic', 'amazonMusic'];
+  let album;
+  if (source.service === 'spotify') album = spotifyAlbum_(source.id);
+  else if (source.service === 'appleMusic') album = appleLookup_(source.id, source.country || country);
+  else album = deezerAlbum_(source.id);
+
+  const links = {};
+  links[source.service] = album.url || cleanString(body.url);
+  // Deezer first: it has the record label itself (Apple only has a copyright line), and when
+  // the artist is still unknown, Deezer's match gives the artist for the Apple Music search.
+  if (source.service !== 'deezer') {
+    const deezer = deezerSearch_(album);
+    if (deezer) {
+      links.deezer = deezer.url;
+      album = fillMissing(album, deezer);
+      if (deezer.label) album.label = deezer.label;
+    }
   }
-  return { album: Object.assign({}, album, { links: links }), searchLinks: searchLinks };
+  if (source.service !== 'appleMusic') {
+    const apple = appleSearch_(album, country);
+    if (apple) {
+      links.appleMusic = apple.url;
+      album = fillMissing(album, apple);
+    }
+  }
+  const out = { links: links };
+  ALBUM_INFO_FIELDS.forEach(function (field) {
+    out[field] = cleanString(album[field]);
+  });
+  return { album: out, source: source.service, version: API_VERSION };
 }
 
 // ============================================================================
