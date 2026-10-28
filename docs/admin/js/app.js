@@ -11,7 +11,7 @@ const SETTINGS_KEY = 'bw-admin-sheet';
 const OLD_SETTINGS_KEY = 'bw-admin-settings';
 const DEFAULT_SITE_URL = new URL('../', location.href).href;
 const SAVED_MSG = 'Saved ✓ — the public page shows it within a minute.';
-const VIEWS = ['connection', 'albums', 'editor', 'sticker', 'site'];
+const VIEWS = ['login', 'connection', 'albums', 'editor', 'sticker', 'site'];
 const TAB_OF_VIEW = { connection: 'connection', albums: 'albums', editor: 'albums', sticker: 'albums', site: 'site' };
 const TEXT_LABELS = {
   listen: 'Heading above the platform buttons',
@@ -171,7 +171,7 @@ function isConfigured() {
 }
 
 function makeClient() {
-  if (!isConfigured()) throw new Error('Connect to the Google Sheet first (Connection tab).');
+  if (!isConfigured()) throw new Error('Log in first.');
   return new SheetApi({ url: state.settings.url, password: state.settings.password });
 }
 
@@ -181,18 +181,57 @@ const siteBase = () => state.settings.siteUrl;
 
 function showView(name) {
   for (const v of VIEWS) $(`view-${v}`).hidden = v !== name;
+  $('top').hidden = name === 'login';
   for (const b of document.querySelectorAll('[data-tab]')) {
     b.classList.toggle('on', b.dataset.tab === TAB_OF_VIEW[name]);
   }
   window.scrollTo(0, 0);
 }
 
-// Sends the user to the Connection tab when no password is saved yet.
+// Sends the user to the login screen when no password is saved yet.
 function requireConfig() {
   if (isConfigured()) return true;
-  showView('connection');
-  setStatus('Connect first: enter the web app URL and admin password, then press "Save & test".', 'err');
+  showLogin();
   return false;
+}
+
+/* ---------- login ---------- */
+
+function showLogin() {
+  setVal('g-password', '');
+  setMsg('g-msg', '');
+  showView('login');
+  $('g-password').focus();
+}
+
+// The password is saved only after the web app accepts it. The URL comes from docs/config.json
+// when it has one, so a stale URL saved in this browser cannot lock the user out.
+async function onLogin(event) {
+  event.preventDefault();
+  const password = $('g-password').value;
+  const url = state.config.appsScriptUrl || state.settings.url;
+  if (!password.trim()) {
+    setMsg('g-msg', 'Type the admin password.', 'err');
+    return;
+  }
+  if (!url) {
+    setMsg('g-msg', 'The web app URL is missing. Put it in docs/config.json first.', 'err');
+    return;
+  }
+  const btn = $('g-login');
+  setBusy(btn, 'Logging in…');
+  try {
+    await new SheetApi({ url, password }).ping();
+  } catch (e) {
+    setMsg('g-msg', errorText(e), 'err');
+    return;
+  } finally {
+    setBusy(btn, '');
+  }
+  state.settings = { ...state.settings, url, password };
+  if (!persistSettings()) setStatus('Logged in, but this browser will not remember it.', 'err');
+  fillConnectionForm();
+  await showAlbums();
 }
 
 /* ---------- connection ---------- */
@@ -266,8 +305,9 @@ function onForgetPassword() {
   setVal('c-password', '');
   persistSettings();
   hideSheetCheck();
-  setMsg('c-result', 'Password forgotten on this browser.', 'ok');
-  setStatus('Password forgotten. Type it again to reconnect.', 'info');
+  setMsg('c-result', '');
+  showLogin();
+  setStatus('Password forgotten on this browser.', 'ok');
 }
 
 async function onCopyConfig() {
@@ -718,6 +758,8 @@ function wire() {
   }
   $('status').addEventListener('click', () => { $('status').hidden = true; });
 
+  $('g-form').addEventListener('submit', (e) => guard(() => onLogin(e)));
+
   $('c-save').addEventListener('click', () => guard(onSaveConnection));
   $('c-forget').addEventListener('click', onForgetPassword);
   $('c-config-copy').addEventListener('click', () => guard(onCopyConfig));
@@ -756,8 +798,7 @@ async function init() {
   if (isConfigured()) {
     guard(showAlbums);
   } else {
-    showView('connection');
-    setStatus('Welcome! Enter the web app URL and admin password on this page to start.', 'info');
+    showLogin();
   }
 }
 
