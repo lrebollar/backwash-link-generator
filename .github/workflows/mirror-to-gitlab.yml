@@ -42,8 +42,8 @@ jobs:
           GITLAB_HOST: ${{ secrets.GITLAB_HOST }}
         run: |
           fail() { echo "::error::$1"; exit 1; }
-          [ -n "$GITLAB_PROJECT" ] || fail "The GITLAB_PROJECT secret is missing (README, Step 1)."
-          [ -n "$GITLAB_TOKEN" ] || fail "The GITLAB_TOKEN secret is missing (README, Step 1)."
+          [ -n "$GITLAB_PROJECT" ] || fail "The GITLAB_PROJECT secret is missing (ops/one-time-setup/1-github-gitlab.md)."
+          [ -n "$GITLAB_TOKEN" ] || fail "The GITLAB_TOKEN secret is missing (ops/one-time-setup/1-github-gitlab.md)."
 
           host="${GITLAB_HOST:-gitlab.com}"
           project="$(printf '%s' "$GITLAB_PROJECT" | tr -d '[:space:]')"
@@ -63,7 +63,7 @@ jobs:
           info="$(curl -sS -H "PRIVATE-TOKEN: ${GITLAB_TOKEN}" "${api}/personal_access_tokens/self" || true)"
           if echo "$info" | jq -e '.id' >/dev/null 2>&1; then
             echo "Token: $(echo "$info" | jq -c '{name, active, revoked, expires_at, scopes, last_used_at}')"
-            [ "$(echo "$info" | jq -r '.active')" = "true" ] || fail "This GitLab token is revoked or expired. Make a new one (README, Step 1, item 3)."
+            [ "$(echo "$info" | jq -r '.active')" = "true" ] || fail "This GitLab token is revoked or expired. Make a new one (ops/maintenance/github-gitlab.md)."
           else
             echo "GitLab did not describe the token (normal for some token types): $(echo "$info" | head -c 200)"
           fi

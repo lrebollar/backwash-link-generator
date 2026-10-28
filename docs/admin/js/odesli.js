@@ -11,7 +11,7 @@ const MSG_NOT_FOUND = "Couldn't find that link on the streaming services. Check 
 const MSG_RATE = 'Too many lookups — wait a minute and try again.';
 const MSG_NETWORK = "Couldn't reach song.link (network or blocked). Fill the links by hand.";
 const MSG_SETUP = 'The Apps Script needs one more permission: open Apps Script, run setup once and click Allow, then Deploy → Manage deployments → Edit (pencil) → Version: New version → Deploy.';
-const MSG_OLD_SCRIPT = 'Your Apps Script is an older version. Update it with the latest google-sheet/Code.gs (README: Update the Apps Script).';
+const MSG_OLD_SCRIPT = 'Your Apps Script is an older version. Update it with the latest google-sheet/Code.gs (ops/maintenance/google-sheet.md: Update the Apps Script).';
 
 // Lower rank = preferred when two thumbnails have the same width.
 function artRank(entity) {
