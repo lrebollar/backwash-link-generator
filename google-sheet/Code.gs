@@ -72,7 +72,7 @@
 
 const ALBUMS_SHEET = 'Albums';
 const SITE_SHEET = 'Site';
-const API_VERSION = 4;
+const API_VERSION = 5;
 
 // Album columns in template order. Headers are matched BY NAME, so extra
 // columns are tolerated and the order of these may differ in a real sheet.
@@ -284,9 +284,20 @@ function htmlMeta(html) {
   return meta;
 }
 
+// Spotify words album titles like its page title, "Nevermind - Album by Nirvana | Spotify",
+// sometimes with "Listen to " in front or " on Spotify" at the end; this splits such text into
+// {title, artist} ("Nevermind", "Nirvana"). Other text is the title as it is, with no artist.
+function splitSpotifyTitle(text) {
+  const full = cleanString(text);
+  const match = /^(?:Listen to\s+)?(.+?)(?:\s+-\s+(?:Album|Single|EP|Compilation)\s+by\s+(.+?))?(\s+on\s+Spotify[.!]?|\s*\|\s*Spotify)?$/i.exec(full);
+  if (!match || (!match[2] && !match[3])) return { title: full, artist: '' };
+  return { title: match[1].trim(), artist: cleanString(match[2]) };
+}
+
 // Album details from the meta tags of a Spotify album page. Its og:description reads like
 // "Listen to <album> on Spotify. <artist> · Album · 2019 · 12 songs."
 function spotifyAlbumInfo(meta) {
+  const name = splitSpotifyTitle(meta['og:title']);
   const parts = cleanString(meta['og:description']).split(' · ');
   const intro = parts[0];
   const afterSpotify = intro.lastIndexOf('Spotify');
@@ -295,8 +306,8 @@ function spotifyAlbumInfo(meta) {
     : '';
   const yearFromText = parts.filter(function (part) { return /^\d{4}$/.test(part.trim()); })[0] || '';
   return {
-    title: cleanString(meta['og:title']),
-    artist: cleanString(meta['music:musician_description']) || artistFromText.trim(),
+    title: name.title,
+    artist: cleanString(meta['music:musician_description']) || artistFromText.trim() || name.artist,
     year: yearOf(meta['music:release_date']) || yearFromText.trim(),
     label: '',
     cover: httpsOrEmpty(meta['og:image']),
@@ -308,12 +319,10 @@ function spotifyAlbumInfo(meta) {
 function spotifyPageInfo(html) {
   const info = spotifyAlbumInfo(htmlMeta(html));
   const tag = /<title[^>]*>([^<]*)<\/title>/i.exec(String(html));
-  const parts = tag
-    ? /^(.+?) - (?:Album|Single|EP|Compilation) by (.+?) \| Spotify$/i.exec(decodeHtml(tag[1]).trim())
-    : null;
-  if (parts) {
-    if (!info.title) info.title = parts[1];
-    if (!info.artist) info.artist = parts[2];
+  const name = tag ? splitSpotifyTitle(decodeHtml(tag[1])) : { title: '', artist: '' };
+  if (name.artist) {
+    if (!info.title) info.title = name.title;
+    if (!info.artist) info.artist = name.artist;
   }
   return info;
 }
@@ -362,7 +371,7 @@ function spotifyEmbedInfo(html, id) {
   const release = entity.releaseDate;
   const cover = entity.coverArt && entity.coverArt.sources;
   return {
-    title: cleanString(entity.name || entity.title),
+    title: splitSpotifyTitle(entity.name || entity.title).title,
     artist: artists.join(', ') || cleanString(entity.subtitle),
     year: yearOf(release && typeof release === 'object' ? release.isoString || release.date : release || entity.release_date),
     label: '',
@@ -1110,7 +1119,7 @@ function spotifyAlbum_(id) {
   if (!album.title || !album.cover) {
     const answer = getJson_('Spotify', SPOTIFY_OEMBED_URL + encodeURIComponent(link));
     if (answer.data) {
-      album = fillMissing(album, { title: answer.data.title, cover: httpsOrEmpty(answer.data.thumbnail_url) });
+      album = fillMissing(album, { title: splitSpotifyTitle(answer.data.title).title, cover: httpsOrEmpty(answer.data.thumbnail_url) });
     } else if (!album.title) {
       if (answer.status === 400 || answer.status === 404) throw apiError('NOT_FOUND', MSG_SPOTIFY_NOT_FOUND);
       if (answer.status === 429) throw apiError('RATE_LIMIT', MSG_RATE_LIMIT);

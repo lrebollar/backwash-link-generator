@@ -32,7 +32,7 @@ For records and store settings, open the Google Sheet. Click **File**, then **Ve
 
 ## Update the Apps Script
 
-When `google-sheet/Code.gs` changes (for example, the update that made **Auto-fill** fill in the artist, year and label), copy the new version into your sheet once:
+When `google-sheet/Code.gs` changes (for example, the update that stopped **Auto-fill** from putting "Listen to … | Spotify" in the title), copy the new version into your sheet once:
 
 1. On github.com, open `google-sheet/Code.gs` and copy all of it.
 2. In your Google Sheet, click **Extensions**, then **Apps Script**. Select all the code there, delete it, and paste the new code. Click **Save** (disk icon).
