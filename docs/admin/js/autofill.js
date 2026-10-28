@@ -4,8 +4,8 @@
 //   Browsers cannot call these services themselves (no CORS).
 // - searchLink(): a link that opens a search for the album on one streaming service.
 
-// The first Code.gs version whose `autofill` reads Apple Music and Deezer links and finds labels.
-const MIN_API_VERSION = 4;
+// The first Code.gs version whose `autofill` gives clean Spotify titles (not "Listen to … | Spotify").
+const MIN_API_VERSION = 5;
 const MSG_RATE = 'Too many lookups — wait a minute and try again.';
 const MSG_SETUP = 'The Apps Script needs one more permission: open Apps Script, run setup once and click Allow, then Deploy → Manage deployments → Edit (pencil) → Version: New version → Deploy.';
 const MSG_OLD_SCRIPT = 'Your Apps Script is an older version. Update it with the latest google-sheet/Code.gs (ops/maintenance/google-sheet.md: Update the Apps Script).';
@@ -32,6 +32,21 @@ const SEARCH = {
   soundcloud: (q) => `https://soundcloud.com/search?q=${q}`,
   bandcamp: (q) => `https://bandcamp.com/search?q=${q}&item_type=a`,
 };
+
+/**
+ * What the "Look up" links search for: the artist and the title without extras such as
+ * "(Remastered)", "[Deluxe Edition]" or " - Single". Strict searches (TIDAL, Amazon Music)
+ * find nothing when every word of those extras must match.
+ */
+export function searchWords(artist, title) {
+  const full = String(title || '').trim();
+  const bare = full
+    .replace(/\s*[([][^)\]]*[)\]]/g, ' ')
+    .replace(/\s+-\s+(?:single|ep|[^-]*\bremaster(?:ed)?\b[^-]*)$/i, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return `${String(artist || '').trim()} ${bare || full}`.trim();
+}
 
 /**
  * A link that opens a search for `words` (e.g. "Nirvana Nevermind") on one platform, or ''.

@@ -2,7 +2,7 @@
 // Reads and writes albums and site settings through the Apps Script web app (api.js).
 
 import { SheetApi, loadConfig } from './api.js';
-import { autofill, searchLink, isSearchLink, AUTOFILL_PLATFORMS } from './autofill.js';
+import { autofill, searchLink, searchWords, isSearchLink, AUTOFILL_PLATFORMS } from './autofill.js';
 import { toJpegBase64 } from './cover.js';
 import { renderQR, qrPngDataUrl, nfcSupported, writeNfc, ntagHint } from './share.js';
 import { PLATFORMS, SOCIALS, THEMES, DEFAULT_TEXTS, SLUG_RE, slugify } from '../../assets/js/platforms.js';
@@ -462,7 +462,7 @@ function hasAlbumLink(key) {
 // Shows "Look up on <platform> ↗" under each link box that has no album link yet. It opens a
 // search for the artist and title on that platform in a new tab.
 function refreshLookupLinks() {
-  const words = `${val('a-artist')} ${val('a-title')}`;
+  const words = searchWords(val('a-artist'), val('a-title'));
   for (const p of PLATFORMS) {
     const link = $(`a-find-${p.key}`);
     const href = hasAlbumLink(p.key) ? '' : searchLink(p.key, words, state.settings.country);
