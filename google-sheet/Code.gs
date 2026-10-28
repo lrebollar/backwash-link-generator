@@ -25,10 +25,6 @@
  *  4. In the Apps Script editor, click the gear icon (Project Settings). Under
  *     "Script properties", click "Add script property":
  *        Property: ADMIN_PASSWORD      Value: a password you choose
- *     Optional: add one more property for more song.link lookups per minute
- *     (the album auto-fill box uses song.link; without a key its shared limit
- *     applies, about 10 lookups a minute):
- *        Property: ODESLI_API_KEY      Value: a free key from developers@song.link
  *     Click "Save script properties". Keep this password private.
  *  5. Back in the editor, choose "setup" from the function menu at the top and
  *     click Run. Google asks you to review permissions: choose your account,
@@ -48,13 +44,11 @@
  *  UPDATING THIS SCRIPT LATER (the Web app URL stays the same)
  *  1. Paste the new version into the editor and save.
  *  2. Choose "setup" from the function menu and click Run, then Allow if Google
- *     asks for a new permission (the song.link lookup needs one). Running setup
- *     again is always safe.
+ *     asks for a new permission (Auto-fill needs one to contact Spotify and
+ *     Apple). Running setup again is always safe.
  *  3. Click Deploy, Manage deployments, the pencil icon, set Version to
  *     "New version", and click Deploy. Do NOT choose "New deployment" again:
  *     that creates a new URL.
- *  The optional ODESLI_API_KEY property (step 4) can be added at any time; it
- *  takes effect without a new deployment.
  *
  *  Anyone who can EDIT the sheet can also see the script properties, so give
  *  edit access only to people you trust.
@@ -65,8 +59,9 @@
  *        ?action=site               -> the store settings
  *        ?action=album&slug=<slug>  -> one album
  *  - POST (JSON body {action, password, ...}): ping, listAlbums, getAlbum,
- *        saveAlbum, deleteAlbum, getSite, saveSite, uploadCover, lookup.
- *        lookup {url, country} asks song.link for the links of one album link.
+ *        saveAlbum, deleteAlbum, getSite, saveSite, uploadCover, autofill.
+ *        autofill {url, country} reads one Spotify album link and finds the
+ *        album's other streaming links.
  *  Every answer is JSON: {ok:true, ...} or {ok:false, code, error}.
  *  Codes: AUTH, SETUP, BAD_REQUEST, NOT_FOUND, EXISTS, CONFLICT, RATE_LIMIT, SERVER.
  */
@@ -77,7 +72,7 @@
 
 const ALBUMS_SHEET = 'Albums';
 const SITE_SHEET = 'Site';
-const API_VERSION = 2;
+const API_VERSION = 3;
 
 // Album columns in template order. Headers are matched BY NAME, so extra
 // columns are tolerated and the order of these may differ in a real sheet.
@@ -124,8 +119,9 @@ const THEME_KEYS = ['ink', 'paper', 'fire', 'sun', 'cover'];
 const SLUG_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const SLUG_MAX_LENGTH = 60;
 
-// Links for the song.link lookup: http or https, with a host and no spaces.
-const HTTP_LINK_RE = /^https?:\/\/[^\s/]+\S*$/i;
+// Spotify album links: open.spotify.com/album/<id> (also with /intl-xx/ or /embed/
+// before "album", and with ?si=... after the id) or spotify:album:<id>.
+const SPOTIFY_ALBUM_RE = /^(?:https?:\/\/open\.spotify\.com\/(?:intl-[a-z-]+\/)?(?:embed\/)?album\/|spotify:album:)([A-Za-z0-9]{22})(?:[/?#]|$)/i;
 
 const ADMIN_PASSWORD_PROPERTY = 'ADMIN_PASSWORD';
 const COVERS_FOLDER_PROPERTY = 'COVERS_FOLDER_ID';
@@ -134,8 +130,16 @@ const LOCK_WAIT_MS = 20000;
 const AUTH_DELAY_MS = 1000;
 const COVER_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
 const COVER_MAX_BASE64_CHARS = 14 * 1024 * 1024; // about 10 MB of image data
-const ODESLI_KEY_PROPERTY = 'ODESLI_API_KEY'; // optional script property (free key)
-const ODESLI_LINKS_URL = 'https://api.song.link/v1-alpha.1/links';
+const SPOTIFY_ALBUM_URL = 'https://open.spotify.com/album/';
+const SPOTIFY_OEMBED_URL = 'https://open.spotify.com/oembed?url=';
+const ITUNES_SEARCH_URL = 'https://itunes.apple.com/search';
+// Amazon Music website per store country. Other countries use music.amazon.com.
+const AMAZON_MUSIC_HOSTS = {
+  US: 'music.amazon.com', GB: 'music.amazon.co.uk', DE: 'music.amazon.de', FR: 'music.amazon.fr',
+  IT: 'music.amazon.it', ES: 'music.amazon.es', JP: 'music.amazon.co.jp', CA: 'music.amazon.ca',
+  AU: 'music.amazon.com.au', MX: 'music.amazon.com.mx', BR: 'music.amazon.com.br', IN: 'music.amazon.in',
+};
+const MSG_RATE_LIMIT = 'Too many lookups — wait a minute and try again.';
 
 // The demo album written by setup() when the Albums tab has no albums yet.
 const DEMO_ALBUM = {
@@ -215,11 +219,138 @@ function isValidSlug(slug) {
   return typeof slug === 'string' && slug.length <= SLUG_MAX_LENGTH && SLUG_RE.test(slug);
 }
 
-// The song.link request address for one link. The key is optional (empty = none).
-function odesliUrl(link, country, key) {
-  let url = ODESLI_LINKS_URL + '?url=' + encodeURIComponent(link) + '&userCountry=' + country;
-  if (key) url += '&key=' + encodeURIComponent(key);
-  return url;
+// The album ID in a Spotify album link, or '' when the text is not one.
+function spotifyAlbumId(link) {
+  const match = SPOTIFY_ALBUM_RE.exec(cleanString(link));
+  return match ? match[1] : '';
+}
+
+// Turns HTML character references (&amp;, &#39;, &#x27;, ...) back into characters.
+function decodeHtml(text) {
+  const named = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ' };
+  return String(text).replace(/&(#x[0-9a-f]+|#[0-9]+|amp|lt|gt|quot|apos|nbsp);/gi, function (all, ref) {
+    const lower = ref.toLowerCase();
+    if (lower.charAt(0) !== '#') return named[lower];
+    const code = lower.charAt(1) === 'x' ? parseInt(lower.slice(2), 16) : parseInt(lower.slice(1), 10);
+    return code > 0 && code <= 0x10ffff ? String.fromCodePoint(code) : all;
+  });
+}
+
+// The <meta> tags of a web page as {property or name: content}. The first tag of a name wins.
+function htmlMeta(html) {
+  const meta = {};
+  (String(html).match(/<meta\b[^>]*>/gi) || []).forEach(function (tag) {
+    const attrs = {};
+    tag.replace(/([a-z:-]+)\s*=\s*(?:"([^"]*)"|'([^']*)')/gi, function (all, name, doubleQuoted, singleQuoted) {
+      attrs[name.toLowerCase()] = doubleQuoted !== undefined ? doubleQuoted : singleQuoted;
+      return all;
+    });
+    const key = attrs.property || attrs.name;
+    if (key && attrs.content !== undefined && !hasOwn(meta, key)) {
+      meta[key] = decodeHtml(attrs.content).trim();
+    }
+  });
+  return meta;
+}
+
+// Album details from the meta tags of a Spotify album page. Its og:description reads like
+// "Listen to <album> on Spotify. <artist> · Album · 2019 · 12 songs."
+function spotifyAlbumInfo(meta) {
+  const parts = cleanString(meta['og:description']).split(' · ');
+  const intro = parts[0];
+  const afterSpotify = intro.lastIndexOf('Spotify');
+  const artistFromText = parts.length > 1
+    ? intro.slice(afterSpotify < 0 ? 0 : afterSpotify + 'Spotify'.length).replace(/^[.!:\s]+/, '')
+    : '';
+  const yearFromText = parts.filter(function (part) { return /^\d{4}$/.test(part.trim()); })[0] || '';
+  const releaseYear = (/^\d{4}/.exec(cleanString(meta['music:release_date'])) || [''])[0];
+  return {
+    title: cleanString(meta['og:title']),
+    artist: cleanString(meta['music:musician_description']) || artistFromText.trim(),
+    year: releaseYear || yearFromText.trim(),
+    cover: /^https:\/\//i.test(cleanString(meta['og:image'])) ? cleanString(meta['og:image']) : '',
+  };
+}
+
+// Lowercase words without accents, punctuation or "and"/"&", for comparing names.
+function nameKey(text) {
+  return cleanString(text).normalize('NFD').replace(/\p{M}/gu, '').toLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, ' ')
+    .split(' ')
+    .filter(function (word) { return word && word !== 'and'; })
+    .join(' ');
+}
+
+// An album title without Apple's " - Single" / " - EP" ending.
+function titleKey(text) {
+  return nameKey(cleanString(text).replace(/\s+-\s+(?:single|ep)$/i, ''));
+}
+
+// Like titleKey, but also without (...) and [...] parts such as "(Deluxe Edition)".
+function bareTitleKey(text) {
+  return titleKey(cleanString(text).replace(/\s*[([][^)\]]*[)\]]/g, ' '));
+}
+
+// 2 = same artist, 1 = Spotify's first artist is one of Apple's artists, 0 = different.
+function artistScore(spotifyArtist, appleArtist) {
+  const ours = nameKey(spotifyArtist);
+  const theirs = nameKey(appleArtist);
+  if (!ours || !theirs) return 0;
+  if (ours === theirs) return 2;
+  const first = nameKey(cleanString(spotifyArtist).split(',')[0]);
+  return first && (' ' + theirs + ' ').indexOf(' ' + first + ' ') >= 0 ? 1 : 0;
+}
+
+// The iTunes Search API result for the same album as `album` ({title, artist, year}), or null.
+// The title and artist must match. Exact titles beat titles that only match without
+// (...) parts; then the closer artist and the same year win; then iTunes' own order.
+function pickAppleAlbum(results, album) {
+  const title = titleKey(album.title);
+  if (!title || !nameKey(album.artist)) return null;
+  const bare = bareTitleKey(album.title);
+  let best = null;
+  let bestScore = 0;
+  (Array.isArray(results) ? results : []).forEach(function (result) {
+    if (!result || !/^https:\/\//i.test(cleanString(result.collectionViewUrl))) return;
+    const artist = artistScore(album.artist, result.artistName);
+    let sameTitle = 0;
+    if (titleKey(result.collectionName) === title) sameTitle = 2;
+    else if (bare && bareTitleKey(result.collectionName) === bare) sameTitle = 1;
+    if (!artist || !sameTitle) return;
+    const sameYear = album.year && cleanString(result.releaseDate).slice(0, 4) === album.year ? 1 : 0;
+    const score = sameTitle * 10 + artist * 2 + sameYear;
+    if (score > bestScore) {
+      best = result;
+      bestScore = score;
+    }
+  });
+  return best;
+}
+
+// The Apple Music album link of an iTunes Search API result, without the "?uo=4" tracking part.
+function appleAlbumUrl(result) {
+  return cleanString(result.collectionViewUrl).split('?')[0];
+}
+
+// The JSON object in `text`, or null when it is not one.
+function parseJsonObject(text) {
+  try {
+    const data = JSON.parse(text);
+    return data && typeof data === 'object' && !Array.isArray(data) ? data : null;
+  } catch (err) {
+    return null;
+  }
+}
+
+// Links that open a search for the album on services where the exact album can't be looked up.
+function albumSearchLinks(album, country) {
+  const words = cleanString(album.artist + ' ' + album.title).replace(/[\s/]+/g, ' ');
+  const query = encodeURIComponent(words);
+  return {
+    appleMusic: 'https://music.apple.com/' + country.toLowerCase() + '/search?term=' + query,
+    youtubeMusic: 'https://music.youtube.com/search?q=' + query,
+    amazonMusic: 'https://' + (AMAZON_MUSIC_HOSTS[country] || AMAZON_MUSIC_HOSTS.US) + '/search/' + query,
+  };
 }
 
 function normalizeTheme(value) {
@@ -619,8 +750,8 @@ function runAction_(action, body) {
       return saveSiteAction_(body);
     case 'uploadCover':
       return uploadCoverAction_(body);
-    case 'lookup':
-      return lookupAction_(body);
+    case 'autofill':
+      return autofillAction_(body);
     case '':
       throw apiError('BAD_REQUEST', 'Missing "action".');
     default:
@@ -784,52 +915,94 @@ function getCoversFolder_() {
 }
 
 // ============================================================================
-// song.link lookup. The browser cannot call song.link (no CORS), so the admin
-// panel asks this action instead. It writes nothing, so it runs without the lock.
+// Auto-fill. The admin panel sends one Spotify album link; this reads the album from
+// Spotify and finds it on Apple Music (browsers can't call these services: no CORS).
+// It writes nothing, so it runs without the lock.
 // ============================================================================
 
-// Returns song.link's raw answer for one streaming link as `data`.
-function lookupAction_(body) {
-  const link = cleanString(body.url);
-  if (!HTTP_LINK_RE.test(link)) {
-    throw apiError('BAD_REQUEST', 'Paste a full link, e.g. https://open.spotify.com/album/…');
+const MSG_SPOTIFY_NOT_FOUND = "Spotify doesn't know this album. Check the link.";
+
+// UrlFetchApp.fetch that returns HTTP errors instead of throwing them. `service` names
+// the site in the error shown when it can't be reached.
+function fetchFrom_(service, url, options) {
+  try {
+    return UrlFetchApp.fetch(url, Object.assign({ muteHttpExceptions: true }, options));
+  } catch (err) {
+    if (/permission|external_request/i.test(messageOf(err))) {
+      throw apiError('SETUP', 'The Apps Script needs one more permission: open Apps Script, run setup once and click Allow, then Deploy → Manage deployments → Edit (pencil) → Version: New version → Deploy.');
+    }
+    throw apiError('SERVER', "Couldn't reach " + service + '. Try again, or fill the fields by hand.');
+  }
+}
+
+// Title, artist, year and cover of one Spotify album, read from its public page. When the
+// page has no details, Spotify's oEmbed answer gives at least the title and cover.
+function spotifyAlbum_(id) {
+  const link = SPOTIFY_ALBUM_URL + id;
+  const page = fetchFrom_('Spotify', link, { headers: { 'Accept-Language': 'en' } });
+  const pageStatus = page.getResponseCode();
+  if (pageStatus === 404) throw apiError('NOT_FOUND', MSG_SPOTIFY_NOT_FOUND);
+  if (pageStatus >= 200 && pageStatus <= 299) {
+    const album = spotifyAlbumInfo(htmlMeta(page.getContentText()));
+    if (album.title) return album;
+  }
+
+  const answer = fetchFrom_('Spotify', SPOTIFY_OEMBED_URL + encodeURIComponent(link));
+  const status = answer.getResponseCode();
+  if (status === 400 || status === 404) throw apiError('NOT_FOUND', MSG_SPOTIFY_NOT_FOUND);
+  if (status === 429) throw apiError('RATE_LIMIT', MSG_RATE_LIMIT);
+  const data = status >= 200 && status <= 299 ? parseJsonObject(answer.getContentText()) : null;
+  if (!data || !cleanString(data.title)) {
+    throw apiError('SERVER', "Spotify didn't send this album's details (HTTP " + status + '). Try again, or fill the fields by hand.');
+  }
+  const cover = cleanString(data.thumbnail_url);
+  return { title: cleanString(data.title), artist: '', year: '', cover: /^https:\/\//i.test(cover) ? cover : '' };
+}
+
+// The Apple Music album that matches `album`, found with the iTunes Search API, or null.
+// Auto-fill works without it (Apple Music then gets a search link), so errors are only logged.
+function appleAlbum_(album, country) {
+  if (!album.artist) return null;
+  const url = ITUNES_SEARCH_URL + '?media=music&entity=album&limit=25&country=' + country +
+    '&term=' + encodeURIComponent(album.artist + ' ' + album.title);
+  try {
+    const response = UrlFetchApp.fetch(url, { muteHttpExceptions: true });
+    const status = response.getResponseCode();
+    if (status < 200 || status > 299) {
+      Logger.log('iTunes search answered HTTP ' + status + '.');
+      return null;
+    }
+    const data = parseJsonObject(response.getContentText());
+    return pickAppleAlbum(data && data.results, album);
+  } catch (err) {
+    Logger.log('iTunes search failed: ' + messageOf(err));
+    return null;
+  }
+}
+
+// Auto-fill from one Spotify album link: the album's title, artist, year, cover and links.
+// Apple Music gets the album's own link when the iTunes search finds it. YouTube Music and
+// Amazon Music have no free search service, so they get search links. `searchLinks` lists
+// the platforms whose link is a search link.
+function autofillAction_(body) {
+  const id = spotifyAlbumId(body.url);
+  if (!id) {
+    throw apiError('BAD_REQUEST', 'Paste a Spotify album link, e.g. https://open.spotify.com/album/…');
   }
   const country = cleanString(body.country).toUpperCase() || 'US';
   if (!/^[A-Z]{2}$/.test(country)) {
     throw apiError('BAD_REQUEST', 'The country must be a 2-letter code, for example US.');
   }
-  const key = cleanString(PropertiesService.getScriptProperties().getProperty(ODESLI_KEY_PROPERTY));
-
-  let response;
-  try {
-    response = UrlFetchApp.fetch(odesliUrl(link, country, key), { muteHttpExceptions: true });
-  } catch (err) {
-    if (/permission|external_request/i.test(messageOf(err))) {
-      throw apiError('SETUP', 'The Apps Script needs one more permission: open Apps Script, run setup once and click Allow, then Deploy → Manage deployments → Edit (pencil) → Version: New version → Deploy.');
-    }
-    throw err;
+  const album = spotifyAlbum_(id);
+  const links = albumSearchLinks(album, country);
+  links.spotify = SPOTIFY_ALBUM_URL + id;
+  let searchLinks = ['appleMusic', 'youtubeMusic', 'amazonMusic'];
+  const apple = appleAlbum_(album, country);
+  if (apple) {
+    links.appleMusic = appleAlbumUrl(apple);
+    searchLinks = ['youtubeMusic', 'amazonMusic'];
   }
-
-  const status = response.getResponseCode();
-  if (status === 429) {
-    throw apiError('RATE_LIMIT', 'Too many lookups — wait a minute and try again.');
-  }
-  if (status === 400 || status === 404) {
-    throw apiError('NOT_FOUND', "Couldn't find that link on the streaming services. Check the URL or fill the fields by hand.");
-  }
-  if (status < 200 || status > 299) {
-    throw apiError('SERVER', 'song.link answered HTTP ' + status + '.');
-  }
-  let data;
-  try {
-    data = JSON.parse(response.getContentText());
-  } catch (err) {
-    data = null;
-  }
-  if (!data || typeof data !== 'object' || Array.isArray(data)) {
-    throw apiError('SERVER', 'song.link sent an answer that could not be read.');
-  }
-  return { data: data };
+  return { album: Object.assign({}, album, { links: links }), searchLinks: searchLinks };
 }
 
 // ============================================================================

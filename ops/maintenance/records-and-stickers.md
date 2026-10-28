@@ -5,15 +5,16 @@ Do this for each record. It takes about 5 minutes per record.
 ## 1. Add the record
 
 1. In the admin panel, tap **Albums**. Then tap **New album**.
-2. Paste a Spotify link to the album. Apple Music, YouTube, Deezer and Tidal links also work.
-3. Click **Auto-fill**. It fills in the title, artist, cover and links to the other streaming services. It uses the free song.link service, through your Apps Script.
-4. Check every field. Fix anything that is wrong.
-5. Paste the link to this record in your catalog or online shop into the **Shop URL** box.
-6. Click **Save**. The record is saved to your Google Sheet. The public page shows it within about a minute.
+2. Paste the album's Spotify link. To copy it in Spotify, open the album, then **Share** → **Copy album link**.
+3. Click **Auto-fill**. It fills in the title, artist, year and cover, and the Spotify, Apple Music, YouTube Music and Amazon Music links.
+4. Check every field. Fix anything that is wrong. YouTube Music and Amazon Music get a *search link*: it opens a search for the album on that service. Apple Music gets one too when Auto-fill can't find the album there. Search links work for listeners. If you have the album's own link, paste it instead.
+5. Optional: paste links for YouTube, Deezer, TIDAL, SoundCloud or Bandcamp under **More streaming links**. Auto-fill doesn't fill these.
+6. Paste the link to this record in your catalog or online shop into the **Shop URL** box.
+7. Click **Save**. The record is saved to your Google Sheet. The public page shows it within about a minute.
 
 **About cover pictures.** Auto-fill uses a link to the streaming service's picture. You can also upload your own picture. Uploaded pictures are saved in your Google Drive, in a folder called **Backwash Records covers**. Each picture is shared as a view-only link. The first upload may ask you to allow access to Google Drive. Allow it. Covers are square. Uploaded covers are saved at up to 800 × 800 pixels (smaller if the original picture is smaller).
 
-**If Auto-fill fails,** paste the streaming links into the link boxes by hand. If it says "Too many lookups", see [Auto-fill limit](google-sheet.md#auto-fill-limit).
+**If Auto-fill fails,** paste the streaming links into the link boxes by hand. If it says "Too many lookups", wait a minute and try again. If it says the Apps Script is an older version, see [Update the Apps Script](google-sheet.md#update-the-apps-script).
 
 ## 2. Write the sticker
 

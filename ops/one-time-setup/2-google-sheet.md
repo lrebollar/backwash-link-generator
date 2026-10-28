@@ -15,8 +15,6 @@ The sheet holds your records and store settings. You need a free Google account.
 7. Click **Deploy**, then **New deployment**. Click the gear icon next to **Select type**, then choose **Web app**. Set **Execute as** to **Me**. Set **Who has access** to **Anyone**. The password still protects the admin actions. Click **Deploy**. If asked, authorize again. Then copy the **Web app URL**. It ends in `/exec`.
 8. Tell the website where the sheet is. On github.com, open the file `docs/config.json`. Click the pencil icon (**Edit**). Put the sheet ID in `"sheetId"`. The sheet ID is the long part of the sheet's web address, between `/d/` and `/edit`. Put the Web app URL in `"appsScriptUrl"`. Only replace the text inside the quote marks. Click **Commit changes**. (Or send both to whoever helps you.) The site updates in 1–3 minutes after this one-time change.
 
-Optional: for more **Auto-fill** lookups per minute, add an `ODESLI_API_KEY` script property. See [Auto-fill limit](../maintenance/google-sheet.md#auto-fill-limit).
-
 ## If something goes wrong
 
 - The admin says "Wrong admin password." Check the password. It must match the **Value** you typed in item 5 exactly.

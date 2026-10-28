@@ -2,7 +2,7 @@
 // Reads and writes albums and site settings through the Apps Script web app (api.js).
 
 import { SheetApi, loadConfig } from './api.js';
-import { lookup } from './odesli.js';
+import { autofill } from './autofill.js';
 import { toJpegBase64 } from './cover.js';
 import { renderQR, qrPngDataUrl, nfcSupported, writeNfc, ntagHint } from './share.js';
 import { PLATFORMS, SOCIALS, THEMES, DEFAULT_TEXTS, SLUG_RE, slugify } from '../../assets/js/platforms.js';
@@ -440,18 +440,19 @@ function validateAlbum(a) {
 async function onLookup() {
   const url = val('a-lookup-url');
   if (!url) {
-    setMsg('a-lookup-msg', 'Paste a streaming link first.', 'err');
+    setMsg('a-lookup-msg', "Paste the album's Spotify link first.", 'err');
     return;
   }
   const btn = $('a-lookup-btn');
   setBusy(btn, 'Looking up…');
   setMsg('a-lookup-msg', 'Looking up the link…');
   try {
-    // Connected: the Apps Script does the song.link call (browsers are blocked by CORS).
-    const api = isConfigured() ? makeClient() : undefined;
-    const found = await lookup(url, { country: state.settings.country || 'US', api });
-    applyLookup(found);
-    setMsg('a-lookup-msg', 'Filled in. Check the values, then save.', 'ok');
+    const found = await autofill(url, { country: state.settings.country || 'US', api: makeClient() });
+    const searched = applyLookup(found);
+    const note = searched.length
+      ? ` ${listLabels(searched)} ${searched.length === 1 ? 'is a search link' : 'are search links'}: listeners see a search for this album. Paste the album's own link instead if you have it.`
+      : '';
+    setMsg('a-lookup-msg', `Filled in. Check the values, then save.${note}`, 'ok');
   } catch (e) {
     setMsg('a-lookup-msg', errorText(e), 'err');
   } finally {
@@ -459,23 +460,38 @@ async function onLookup() {
   }
 }
 
-// Fills only what the lookup returned; empty results keep the current values.
+// "A", "A and B", "A, B and C" from platform keys.
+function listLabels(keys) {
+  const labels = keys.map((key) => PLATFORMS.find((p) => p.key === key)?.label || key);
+  return labels.length > 1 ? `${labels.slice(0, -1).join(', ')} and ${labels.at(-1)}` : labels.join('');
+}
+
+// Fills only what the lookup returned; empty results keep the current values. A search link
+// never replaces a link that is already there. Returns the platforms that got a search link.
 function applyLookup(found) {
   if (found.title) setVal('a-title', found.title);
   if (found.artist) setVal('a-artist', found.artist);
+  if (found.year) setVal('a-year', found.year);
   if (found.cover) {
     clearCoverFile();
     setVal('a-cover', found.cover);
   }
+  const searched = [];
   for (const p of PLATFORMS) {
     const v = found.links?.[p.key];
-    if (v) setVal(`a-link-${p.key}`, v);
+    if (!v) continue;
+    if (found.searchLinks.includes(p.key)) {
+      if (val(`a-link-${p.key}`)) continue;
+      searched.push(p.key);
+    }
+    setVal(`a-link-${p.key}`, v);
   }
   if (state.editor.isNew && !val('a-slug')) {
     const slug = slugify(`${val('a-artist')} ${val('a-title')}`);
     if (slug) setVal('a-slug', slug);
   }
   updateCoverPreview();
+  return searched;
 }
 
 function revokeCoverObjectUrl() {
@@ -735,8 +751,9 @@ function socialOptions(s) {
 }
 
 function buildFields() {
-  $('a-links').replaceChildren(...PLATFORMS.map((p) =>
-    textField(`a-link-${p.key}`, p.label, { type: 'url', placeholder: 'https://', inputmode: 'url' })));
+  const linkField = (p) => textField(`a-link-${p.key}`, p.label, { type: 'url', placeholder: 'https://', inputmode: 'url' });
+  $('a-links').replaceChildren(...PLATFORMS.filter((p) => p.autofill).map(linkField));
+  $('a-links-optional').replaceChildren(...PLATFORMS.filter((p) => !p.autofill).map(linkField));
   $('s-socials').replaceChildren(...SOCIALS.map((s) => textField(`s-social-${s.key}`, s.label, socialOptions(s))));
   $('s-texts').replaceChildren(...Object.keys(DEFAULT_TEXTS).map((key) =>
     textField(`s-text-${key}`, TEXT_LABELS[key] || key, { placeholder: DEFAULT_TEXTS[key] })));
