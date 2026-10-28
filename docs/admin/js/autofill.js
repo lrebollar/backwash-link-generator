@@ -8,7 +8,7 @@
 const MIN_API_VERSION = 5;
 const MSG_RATE = 'Too many lookups — wait a minute and try again.';
 const MSG_SETUP = 'The Apps Script needs one more permission: open Apps Script, run setup once and click Allow, then Deploy → Manage deployments → Edit (pencil) → Version: New version → Deploy.';
-const MSG_OLD_SCRIPT = 'Your Apps Script is an older version. Update it with the latest google-sheet/Code.gs (ops/maintenance/google-sheet.md: Update the Apps Script).';
+const MSG_OLD_SCRIPT = 'Your Apps Script is an older version. Update it with the latest google-sheet/Code.gs (ops/maintenance.md: Update the Apps Script).';
 
 // The platforms whose album links Auto-fill can read.
 export const AUTOFILL_PLATFORMS = ['spotify', 'appleMusic', 'deezer'];
