@@ -64,7 +64,7 @@ The Web app runs as the person who deployed it. The store owner makes their own 
 2. Choose the function **setup** and click **Run**. Allow the permissions, as in [Setup 2](one-time-setup/2-google-sheet.md), item 6.
 3. Click **Deploy**, then **New deployment**. Choose **Web app**. Set **Execute as** to **Me** and **Who has access** to **Anyone**. Click **Deploy**. Copy the new **Web app URL**.
 4. On github.com, edit `docs/config.json`. Replace `"appsScriptUrl"` with the new Web app URL. Click **Commit changes**.
-5. When the site has updated (1–3 minutes), log in to the admin panel. In the **Connection** tab, check that the **Apps Script web app URL** is the new one. If not, paste it. Click **Save & test**.
+5. When the site has updated (1–3 minutes), log in to the admin panel. In the **Connection** tab, click **Save & test**. You should see a message that says **Connected to** and the name of your sheet. The admin panel always uses the Web app URL from `docs/config.json`.
 6. Turn off the old deployment: **Deploy**, then **Manage deployments**. Select the old deployment. Click **Archive**.
 
 ## 5. Lock out the old access

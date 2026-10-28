@@ -6,8 +6,8 @@ Do this once on each phone or computer you use for the admin panel.
 
 1. Open the admin panel on your phone or computer: `<your GitLab Pages address>/admin/`. For example: `https://backwash-link-generator-xxxxxx.gitlab.io/admin/`
 2. Until you log in, the page shows only a password box. Type the password you chose in [Setup 2](2-google-sheet.md), item 5, then click **Log in**. Logging in needs `docs/config.json` to be filled in ([Setup 2](2-google-sheet.md), item 8).
-3. Tap or click the **Connection** tab. Check these boxes:
-   - **Apps Script web app URL**: this is filled in for you from `docs/config.json`.
+3. Tap or click the **Connection** tab. Check these:
+   - **Open the Google Sheet** and **Open the Apps Script web app**: links to your sheet and your web app. They come from `docs/config.json`. To change them, edit that file ([Setup 2](2-google-sheet.md), item 8).
    - **Admin password**: the password you just typed.
    - **Public site URL**: this is filled in for you.
    - **Country for link lookup**: choose your country. Auto-fill uses it to find the album on Apple Music, and the **Look up** buttons use it for Apple Music and Amazon Music.

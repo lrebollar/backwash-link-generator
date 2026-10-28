@@ -145,7 +145,8 @@ function normalizeSiteUrl(raw) {
 }
 
 // Only the keys of SETTINGS_KEY are read. Settings saved by the old repo-based admin held an access
-// token, so they are deleted. The web app URL falls back to docs/config.json when nothing is saved yet.
+// token, so they are deleted. The web app URL comes from docs/config.json; the one saved in this
+// browser is used only when that file can't be read.
 function loadSettings(config) {
   let saved = {};
   try {
@@ -155,7 +156,7 @@ function loadSettings(config) {
     saved = {};
   }
   const settings = {
-    url: String(saved.url || config.appsScriptUrl || ''),
+    url: String(config.appsScriptUrl || saved.url || ''),
     password: String(saved.password || ''),
     siteUrl: String(saved.siteUrl || ''),
     country: String(saved.country || 'US'),
@@ -247,9 +248,28 @@ async function onLogin(event) {
 
 /* ---------- connection ---------- */
 
+// Shows a link, or hides it when there is no address.
+function setLink(id, href) {
+  const link = $(id);
+  link.hidden = !href;
+  if (href) link.href = href;
+  else link.removeAttribute('href');
+}
+
+// The sheet and web app links are read-only: both come from docs/config.json.
+function fillConnectionLinks() {
+  const sheetId = sheetIdOf(state.config.sheetId);
+  setLink('c-sheet', sheetId ? `https://docs.google.com/spreadsheets/d/${encodeURIComponent(sheetId)}/edit` : '');
+  setLink('c-script', state.settings.url);
+  const missing = [!sheetId && '"sheetId"', !state.settings.url && '"appsScriptUrl"'].filter(Boolean);
+  const msg = $('c-links-msg');
+  msg.hidden = !missing.length;
+  msg.textContent = missing.length ? `Put ${joinWords(missing)} in docs/config.json on GitHub.` : '';
+}
+
 function fillConnectionForm() {
   const s = state.settings;
-  setVal('c-url', s.url);
+  fillConnectionLinks();
   setVal('c-password', s.password);
   setVal('c-site', s.siteUrl);
   setVal('c-country', s.country);
@@ -257,13 +277,10 @@ function fillConnectionForm() {
 
 function readConnectionForm() {
   const next = {
-    url: val('c-url'),
     password: $('c-password').value,
     siteUrl: normalizeSiteUrl(val('c-site')),
     country: val('c-country').toUpperCase() || 'US',
   };
-  if (!next.url) throw new Error('Paste the Apps Script web app URL first.');
-  if (!/^https:\/\//i.test(next.url)) throw new Error('The web app URL must start with https://');
   if (!next.password.trim()) throw new Error('Type the admin password first.');
   if (!/^[A-Z]{2}$/.test(next.country)) throw new Error('Country must be a 2-letter code, e.g. US.');
   return next;
