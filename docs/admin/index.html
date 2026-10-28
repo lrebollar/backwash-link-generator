@@ -44,12 +44,24 @@
 </head>
 <body>
 <main>
-  <h1>Backwash admin</h1>
-  <nav class="tabs" aria-label="Sections">
-    <button type="button" data-tab="albums">Albums</button>
-    <button type="button" data-tab="site">Site settings</button>
-    <button type="button" data-tab="connection">Connection</button>
-  </nav>
+  <header id="top" hidden>
+    <h1>Backwash admin</h1>
+    <nav class="tabs" aria-label="Sections">
+      <button type="button" data-tab="albums">Albums</button>
+      <button type="button" data-tab="site">Site settings</button>
+      <button type="button" data-tab="connection">Connection</button>
+    </nav>
+  </header>
+
+  <!-- Login: the only view shown until the password is checked -->
+  <section id="view-login" hidden>
+    <form id="g-form">
+      <label for="g-password">Admin password</label>
+      <input id="g-password" type="password" autocomplete="current-password" spellcheck="false">
+      <p><button type="submit" id="g-login" class="primary">Log in</button></p>
+      <p id="g-msg" role="status"></p>
+    </form>
+  </section>
 
   <!-- Connection -->
   <section id="view-connection" hidden>
