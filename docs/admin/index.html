@@ -107,9 +107,9 @@
     <h2 id="a-heading">New album</h2>
 
     <div class="box">
-      <label for="a-lookup-url">Auto-fill from a streaming link</label>
+      <label for="a-lookup-url">Auto-fill from a Spotify link</label>
       <input id="a-lookup-url" type="url" inputmode="url" placeholder="https://open.spotify.com/album/…" autocomplete="off" autocapitalize="off" spellcheck="false">
-      <p class="hint">Paste a Spotify / Apple Music / YouTube / Deezer / Tidal link. The lookup runs through your Apps Script using the free song.link service (about 10 lookups per minute).</p>
+      <p class="hint">Paste the album's Spotify link (in Spotify: Share → Copy album link). Fills in the title, artist, year, cover, and the Spotify, Apple Music, YouTube Music and Amazon Music links.</p>
       <p><button type="button" id="a-lookup-btn">Auto-fill</button></p>
       <p id="a-lookup-msg" class="hint" role="status"></p>
     </div>
@@ -142,8 +142,12 @@
     <p class="hint">This record in your online catalog.</p>
 
     <h2>Streaming links</h2>
-    <p class="hint">Leave empty to hide a platform.</p>
+    <p class="hint">Auto-fill fills these. Leave a link empty to hide that platform.</p>
     <div id="a-links"></div>
+
+    <h2>More streaming links (optional)</h2>
+    <p class="hint">Auto-fill doesn't fill these. Paste a link to show that platform.</p>
+    <div id="a-links-optional"></div>
 
     <div class="actions">
       <button type="button" id="a-save" class="primary">Save</button>

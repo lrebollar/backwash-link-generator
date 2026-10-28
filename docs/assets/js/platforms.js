@@ -1,18 +1,18 @@
 // Shared metadata used by the public page (page.js) and the admin panel.
 // `key` is the field name inside album.links / site.socials.
-// `odesli` is the platform key returned by the song.link (Odesli) API.
+// `autofill` marks the platforms the admin's Auto-fill fills in (google-sheet/Code.gs).
 // `icon` is the key inside ICONS (assets/js/icons.js).
 
 export const PLATFORMS = [
-  { key: 'spotify',      label: 'Spotify',       odesli: 'spotify',      icon: 'spotify' },
-  { key: 'appleMusic',   label: 'Apple Music',   odesli: 'appleMusic',   icon: 'appleMusic' },
-  { key: 'youtubeMusic', label: 'YouTube Music', odesli: 'youtubeMusic', icon: 'youtubeMusic' },
-  { key: 'youtube',      label: 'YouTube',       odesli: 'youtube',      icon: 'youtube' },
-  { key: 'amazonMusic',  label: 'Amazon Music',  odesli: 'amazonMusic',  icon: 'amazonMusic' },
-  { key: 'deezer',       label: 'Deezer',        odesli: 'deezer',       icon: 'deezer' },
-  { key: 'tidal',        label: 'TIDAL',         odesli: 'tidal',        icon: 'tidal' },
-  { key: 'soundcloud',   label: 'SoundCloud',    odesli: 'soundcloud',   icon: 'soundcloud' },
-  { key: 'bandcamp',     label: 'Bandcamp',      odesli: 'bandcamp',     icon: 'bandcamp' },
+  { key: 'spotify',      label: 'Spotify',       icon: 'spotify',      autofill: true },
+  { key: 'appleMusic',   label: 'Apple Music',   icon: 'appleMusic',   autofill: true },
+  { key: 'youtubeMusic', label: 'YouTube Music', icon: 'youtubeMusic', autofill: true },
+  { key: 'youtube',      label: 'YouTube',       icon: 'youtube' },
+  { key: 'amazonMusic',  label: 'Amazon Music',  icon: 'amazonMusic',  autofill: true },
+  { key: 'deezer',       label: 'Deezer',        icon: 'deezer' },
+  { key: 'tidal',        label: 'TIDAL',         icon: 'tidal' },
+  { key: 'soundcloud',   label: 'SoundCloud',    icon: 'soundcloud' },
+  { key: 'bandcamp',     label: 'Bandcamp',      icon: 'bandcamp' },
 ];
 
 export const SOCIALS = [

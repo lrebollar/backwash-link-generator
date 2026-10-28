@@ -73,7 +73,7 @@ The store owner:
 
 1. Change the admin password. See [Change the admin password](maintenance/google-sheet.md#change-the-admin-password).
 2. Open the sheet. Click **Share**. Remove anyone who no longer needs to edit. Editors can see the admin password.
-3. If an `ODESLI_API_KEY` script property exists, it belongs to whoever asked song.link for it. Ask song.link for a new key, or delete the property.
+3. If an `ODESLI_API_KEY` script property exists, delete it. It is no longer used.
 
 ## 6. Cover pictures
 

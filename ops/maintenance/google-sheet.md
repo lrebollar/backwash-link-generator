@@ -32,11 +32,11 @@ For records and store settings, open the Google Sheet. Click **File**, then **Ve
 
 ## Update the Apps Script
 
-When `google-sheet/Code.gs` changes (for example, the update that made **Auto-fill** work), copy the new version into your sheet once:
+When `google-sheet/Code.gs` changes (for example, the update that made **Auto-fill** work from a Spotify link), copy the new version into your sheet once:
 
 1. On github.com, open `google-sheet/Code.gs` and copy all of it.
 2. In your Google Sheet, click **Extensions**, then **Apps Script**. Select all the code there, delete it, and paste the new code. Click **Save** (disk icon).
-3. Choose the function **setup** in the toolbar and click **Run**. If Google asks for permission, click **Review permissions**, choose your account, then **Advanced** → **Go to Backwash admin (unsafe)** → **Allow**. (The Auto-fill update needs permission to contact song.link.)
+3. Choose the function **setup** in the toolbar and click **Run**. If Google asks for permission, click **Review permissions**, choose your account, then **Advanced** → **Go to Backwash admin (unsafe)** → **Allow**. (Auto-fill needs permission to contact Spotify and Apple.)
 4. Click **Deploy**, then **Manage deployments**. Click the pencil icon. Set **Version** to **New version**. Click **Deploy**.
 
 The Web app URL stays the same, so nothing else changes. Your password and data are kept.
@@ -56,13 +56,9 @@ Anyone who can **edit** the sheet can also see the script properties, including 
 
 ## Auto-fill limit
 
-Auto-fill allows about 10 lookups per minute. If you see "Too many lookups", wait a minute and try again.
+If Auto-fill says "Too many lookups", wait a minute and try again.
 
-For a higher limit, ask song.link for a free API key (email developers@song.link). Then add it:
-
-1. Open the Google Sheet. Click **Extensions**, then **Apps Script**.
-2. Click **Project Settings** (gear icon), then **Script Properties**, then **Add script property**.
-3. In **Property**, type `ODESLI_API_KEY`. In **Value**, paste the key. Click **Save script properties**. You do not need to deploy again.
+An `ODESLI_API_KEY` script property from older versions is no longer used. You can delete it: **Project Settings** (gear icon) → **Script Properties** → **Edit script properties** → the trash icon next to it → **Save script properties**.
 
 ## Google's limits
 
