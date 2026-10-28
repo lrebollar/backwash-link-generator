@@ -1,14 +1,15 @@
 // Shared metadata used by the public page (page.js) and the admin panel.
 // `key` is the field name inside album.links / site.socials.
-// `autofill` marks the platforms the admin's Auto-fill fills in (google-sheet/Code.gs).
+// `main` marks the platforms the admin's album editor lists first; the others are under
+// "More streaming links (optional)". The editor's "Look up" search links are in admin/js/autofill.js.
 // `icon` is the key inside ICONS (assets/js/icons.js).
 
 export const PLATFORMS = [
-  { key: 'spotify',      label: 'Spotify',       icon: 'spotify',      autofill: true },
-  { key: 'appleMusic',   label: 'Apple Music',   icon: 'appleMusic',   autofill: true },
-  { key: 'youtubeMusic', label: 'YouTube Music', icon: 'youtubeMusic', autofill: true },
+  { key: 'spotify',      label: 'Spotify',       icon: 'spotify',      main: true },
+  { key: 'appleMusic',   label: 'Apple Music',   icon: 'appleMusic',   main: true },
+  { key: 'youtubeMusic', label: 'YouTube Music', icon: 'youtubeMusic', main: true },
   { key: 'youtube',      label: 'YouTube',       icon: 'youtube' },
-  { key: 'amazonMusic',  label: 'Amazon Music',  icon: 'amazonMusic',  autofill: true },
+  { key: 'amazonMusic',  label: 'Amazon Music',  icon: 'amazonMusic',  main: true },
   { key: 'deezer',       label: 'Deezer',        icon: 'deezer' },
   { key: 'tidal',        label: 'TIDAL',         icon: 'tidal' },
   { key: 'soundcloud',   label: 'SoundCloud',    icon: 'soundcloud' },

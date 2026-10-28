@@ -2,7 +2,7 @@
 // Reads and writes albums and site settings through the Apps Script web app (api.js).
 
 import { SheetApi, loadConfig } from './api.js';
-import { autofill } from './autofill.js';
+import { autofill, searchLink, isSearchLink, AUTOFILL_PLATFORMS } from './autofill.js';
 import { toJpegBase64 } from './cover.js';
 import { renderQR, qrPngDataUrl, nfcSupported, writeNfc, ntagHint } from './share.js';
 import { PLATFORMS, SOCIALS, THEMES, DEFAULT_TEXTS, SLUG_RE, slugify } from '../../assets/js/platforms.js';
@@ -21,6 +21,14 @@ const TEXT_LABELS = {
   follow: 'Heading above the social icons',
   notFound: 'Message when the record is not found',
 };
+// Editor fields that Auto-fill fills: [key in the autofill() answer, input id, name in messages].
+const FOUND_FIELDS = [
+  ['title', 'a-title', 'title'],
+  ['artist', 'a-artist', 'artist'],
+  ['year', 'a-year', 'year'],
+  ['label', 'a-label', 'label'],
+  ['cover', 'a-cover', 'cover'],
+];
 const NFC_TOOLS_HINT = "Writing NFC from the browser only works in Chrome on Android. On iPhone (or any phone) use the free app 'NFC Tools': Write → Add a record → URL/URI → paste the link → Write → hold the sticker.";
 
 const state = {
@@ -28,6 +36,7 @@ const state = {
   settings: null,    // { url, password, siteUrl, country }, saved in this browser
   albums: [],        // album objects from listAlbums
   editor: null,      // { isNew, slug, expectedUpdatedAt }
+  formId: 0,         // goes up each time the editor loads an album; late Auto-fill answers for an older one are dropped
   coverObjectUrl: '',
   statusTimer: 0,
 };
@@ -39,6 +48,8 @@ const val = (id) => $(id).value.trim();
 const setVal = (id, value) => { $(id).value = value ?? ''; };
 const errorText = (e) => (e && e.message) || String(e);
 const isHttpUrl = (s) => /^https?:\/\/\S+$/i.test(s);
+// "A", "A and B", "A, B and C".
+const joinWords = (words) => (words.length > 1 ? `${words.slice(0, -1).join(', ')} and ${words.at(-1)}` : words.join(''));
 // Accepts the bare sheet ID or a full sheet URL, like the public pages do.
 const sheetIdOf = (raw) => {
   const text = String(raw || '').trim();
@@ -382,6 +393,7 @@ async function openAlbum(slug) {
 
 function fillAlbumForm(a) {
   const links = a.links || {};
+  state.formId += 1;
   setVal('a-title', a.title);
   setVal('a-artist', a.artist);
   setVal('a-year', a.year);
@@ -390,13 +402,17 @@ function fillAlbumForm(a) {
   setVal('a-slug', state.editor.slug);
   setVal('a-cover', a.cover);
   setVal('a-shop', a.shopUrl);
-  for (const p of PLATFORMS) setVal(`a-link-${p.key}`, links[p.key]);
+  for (const p of PLATFORMS) {
+    setVal(`a-link-${p.key}`, links[p.key]);
+    setMsg(`a-link-msg-${p.key}`, '');
+  }
   setVal('a-lookup-url', '');
   clearCoverFile();
   setMsg('a-lookup-msg', '');
   setMsg('a-msg', '');
   refreshEditorChrome();
   updateCoverPreview();
+  refreshLookupLinks();
 }
 
 function refreshEditorChrome() {
@@ -437,6 +453,25 @@ function validateAlbum(a) {
   return '';
 }
 
+// True when the platform's link box holds an album link (not empty, and not a search link).
+function hasAlbumLink(key) {
+  const v = val(`a-link-${key}`);
+  return isHttpUrl(v) && !isSearchLink(v);
+}
+
+// Shows "Look up on <platform> ↗" under each link box that has no album link yet. It opens a
+// search for the artist and title on that platform in a new tab.
+function refreshLookupLinks() {
+  const words = `${val('a-artist')} ${val('a-title')}`;
+  for (const p of PLATFORMS) {
+    const link = $(`a-find-${p.key}`);
+    const href = hasAlbumLink(p.key) ? '' : searchLink(p.key, words, state.settings.country);
+    link.hidden = !href;
+    if (href) link.href = href;
+    else link.removeAttribute('href');
+  }
+}
+
 async function onLookup() {
   const url = val('a-lookup-url');
   if (!url) {
@@ -444,54 +479,78 @@ async function onLookup() {
     return;
   }
   const btn = $('a-lookup-btn');
+  const formId = state.formId;
   setBusy(btn, 'Looking up…');
   setMsg('a-lookup-msg', 'Looking up the link…');
   try {
     const found = await autofill(url, { country: state.settings.country || 'US', api: makeClient() });
-    const searched = applyLookup(found);
-    const note = searched.length
-      ? ` ${listLabels(searched)} ${searched.length === 1 ? 'is a search link' : 'are search links'}: listeners see a search for this album. Paste the album's own link instead if you have it.`
-      : '';
+    if (formId !== state.formId) return;
+    const sourceLabel = PLATFORMS.find((p) => p.key === found.source)?.label;
+    const others = applyLookup(found, { overwrite: true }).links.filter((label) => label !== sourceLabel);
+    const missing = PLATFORMS.filter((p) => p.main && !hasAlbumLink(p.key)).map((p) => p.label);
+    let note = others.length ? ` Also found the ${joinWords(others)} link${others.length === 1 ? '' : 's'}.` : '';
+    if (missing.length) note += ` For ${joinWords(missing)}, use the Look up buttons under Streaming links.`;
     setMsg('a-lookup-msg', `Filled in. Check the values, then save.${note}`, 'ok');
   } catch (e) {
-    setMsg('a-lookup-msg', errorText(e), 'err');
+    if (formId === state.formId) setMsg('a-lookup-msg', errorText(e), 'err');
   } finally {
     setBusy(btn, '');
   }
 }
 
-// "A", "A and B", "A, B and C" from platform keys.
-function listLabels(keys) {
-  const labels = keys.map((key) => PLATFORMS.find((p) => p.key === key)?.label || key);
-  return labels.length > 1 ? `${labels.slice(0, -1).join(', ')} and ${labels.at(-1)}` : labels.join('');
+// A Spotify, Apple Music or Deezer album link pasted into its box is read like Auto-fill reads
+// it, to fill in the fields and links that are still empty.
+async function onLinkChange(key) {
+  const msgId = `a-link-msg-${key}`;
+  const url = val(`a-link-${key}`);
+  setMsg(msgId, '');
+  if (!AUTOFILL_PLATFORMS.includes(key) || !hasAlbumLink(key)) return;
+  const formId = state.formId;
+  const current = () => formId === state.formId && val(`a-link-${key}`) === url;
+  setMsg(msgId, 'Reading this album…');
+  try {
+    const found = await autofill(url, { country: state.settings.country || 'US', api: makeClient() });
+    if (!current()) return;
+    const { fields, links } = applyLookup(found, { overwrite: false });
+    const changed = [...fields, ...links.map((label) => `the ${label} link`)];
+    setMsg(msgId, changed.length ? `Filled in ${joinWords(changed)} from this link.` : 'Nothing new to fill in from this link.', 'ok');
+  } catch (e) {
+    if (current()) setMsg(msgId, errorText(e), 'warn');
+  }
 }
 
-// Fills only what the lookup returned; empty results keep the current values. A search link
-// never replaces a link that is already there. Returns the platforms that got a search link.
-function applyLookup(found) {
-  if (found.title) setVal('a-title', found.title);
-  if (found.artist) setVal('a-artist', found.artist);
-  if (found.year) setVal('a-year', found.year);
-  if (found.cover) {
-    clearCoverFile();
-    setVal('a-cover', found.cover);
+// Puts an autofill() answer into the editor. With `overwrite` (the Auto-fill button) the details
+// found replace the text fields; without it (a link pasted into a link box) only empty fields are
+// filled. A link found only goes into a box without an album link, except that the Auto-fill
+// button always puts in the link it read. Returns the names of the fields and the labels of the
+// links that changed.
+function applyLookup(found, { overwrite }) {
+  const fields = [];
+  for (const [key, id, name] of FOUND_FIELDS) {
+    const v = found[key];
+    const current = val(id);
+    if (!v || v === current) continue;
+    if (!overwrite && (current || (key === 'cover' && state.coverObjectUrl))) continue;
+    if (key === 'cover') clearCoverFile();
+    setVal(id, v);
+    fields.push(name);
   }
-  const searched = [];
+  const links = [];
   for (const p of PLATFORMS) {
     const v = found.links?.[p.key];
-    if (!v) continue;
-    if (found.searchLinks.includes(p.key)) {
-      if (val(`a-link-${p.key}`)) continue;
-      searched.push(p.key);
-    }
+    if (!v || v === val(`a-link-${p.key}`)) continue;
+    if (hasAlbumLink(p.key) && !(overwrite && p.key === found.source)) continue;
     setVal(`a-link-${p.key}`, v);
+    setMsg(`a-link-msg-${p.key}`, '');
+    links.push(p.label);
   }
   if (state.editor.isNew && !val('a-slug')) {
     const slug = slugify(`${val('a-artist')} ${val('a-title')}`);
     if (slug) setVal('a-slug', slug);
   }
   updateCoverPreview();
-  return searched;
+  refreshLookupLinks();
+  return { fields, links };
 }
 
 function revokeCoverObjectUrl() {
@@ -750,10 +809,18 @@ function socialOptions(s) {
   return { type: 'url', placeholder: 'https://', inputmode: 'url' };
 }
 
+// A streaming link box, with its "Look up" search link (refreshLookupLinks) and a message line.
+function linkField(p) {
+  const field = textField(`a-link-${p.key}`, p.label, { type: 'url', placeholder: 'https://', inputmode: 'url' });
+  field.append(
+    h('a', { id: `a-find-${p.key}`, class: 'find', target: '_blank', rel: 'noopener', title: 'Opens a search in a new tab', hidden: true, text: `Look up on ${p.label} ↗` }),
+    h('p', { id: `a-link-msg-${p.key}`, class: 'hint', role: 'status' }));
+  return field;
+}
+
 function buildFields() {
-  const linkField = (p) => textField(`a-link-${p.key}`, p.label, { type: 'url', placeholder: 'https://', inputmode: 'url' });
-  $('a-links').replaceChildren(...PLATFORMS.filter((p) => p.autofill).map(linkField));
-  $('a-links-optional').replaceChildren(...PLATFORMS.filter((p) => !p.autofill).map(linkField));
+  $('a-links').replaceChildren(...PLATFORMS.filter((p) => p.main).map(linkField));
+  $('a-links-optional').replaceChildren(...PLATFORMS.filter((p) => !p.main).map(linkField));
   $('s-socials').replaceChildren(...SOCIALS.map((s) => textField(`s-social-${s.key}`, s.label, socialOptions(s))));
   $('s-texts').replaceChildren(...Object.keys(DEFAULT_TEXTS).map((key) =>
     textField(`s-text-${key}`, TEXT_LABELS[key] || key, { placeholder: DEFAULT_TEXTS[key] })));
@@ -792,6 +859,13 @@ function wire() {
       guard(onLookup);
     }
   });
+  $('a-title').addEventListener('input', refreshLookupLinks);
+  $('a-artist').addEventListener('input', refreshLookupLinks);
+  for (const p of PLATFORMS) {
+    const input = $(`a-link-${p.key}`);
+    input.addEventListener('input', refreshLookupLinks);
+    input.addEventListener('change', () => guard(() => onLinkChange(p.key)));
+  }
   $('a-cover').addEventListener('input', updateCoverPreview);
   $('a-cover-file').addEventListener('change', onCoverFileChange);
   $('a-cover-preview').addEventListener('error', onCoverPreviewError);

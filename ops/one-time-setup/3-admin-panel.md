@@ -10,7 +10,7 @@ Do this once on each phone or computer you use for the admin panel.
    - **Apps Script web app URL**: this is filled in for you from `docs/config.json`.
    - **Admin password**: the password you just typed.
    - **Public site URL**: this is filled in for you.
-   - **Country for link lookup**: choose your country. Auto-fill uses it for the Apple Music and Amazon Music links.
+   - **Country for link lookup**: choose your country. Auto-fill uses it to find the album on Apple Music, and the **Look up** buttons use it for Apple Music and Amazon Music.
 4. Click **Save & test**. You should see a message that says **Connected to** and the name of your sheet.
 5. If a yellow box asks you to update `docs/config.json`, the box shows the text to put in that file. Click **Copy**, then do [Setup 2](2-google-sheet.md), item 8 with that text.
 
