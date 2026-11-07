@@ -1,25 +1,24 @@
 # Backwash Records — NFC record pages
 
-Tap an NFC sticker on a record and a page opens for that album. The page lets people play the album on Spotify, Apple Music and other services, buy it, and follow the store.
+Tap an NFC sticker on a record to open its album page: streaming links, shop link, store socials.
 
 - Records and store settings live in a Google Sheet.
-- A password-protected admin panel (`<your site>/admin/`) adds and edits records and writes the stickers.
-- The website is published for free with GitLab Pages. There is no server to pay for or maintain.
+- A password-protected admin panel (`<site>/admin/`) edits records and writes stickers.
+- The site is static and published free with GitHub Pages.
 
-## Documentation
+## Docs
 
-All setup and maintenance guides are in [`ops/`](ops/README.md).
+- [ops/README.md](ops/README.md) — using the admin panel and the sheet
+- [ops/initial_setup.md](ops/initial_setup.md) — one-time setup (fork, GitHub Pages, Google Sheet)
+- [ops/maintenance.md](ops/maintenance.md) — ongoing tasks
+- [AGENT.md](AGENT.md) — technical reference
 
-- [One-time setup](ops/README.md#one-time-setup)
-- [Ongoing maintenance](ops/README.md#ongoing-maintenance)
-- [Hand the project over](ops/handover.md)
-
-## Project layout
+## Layout
 
 ```
-docs/          the website (public record pages and admin panel)
-google-sheet/  the Apps Script and the Google Sheet template
-ops/           setup and maintenance guides
+docs/          the website (public pages and admin panel)
+google-sheet/  Apps Script and Google Sheet template
+ops/           operator guides
 brand/         original logo files
-tools/         scripts that made the logos, icons and sheet template
+tools/         generators for logos, icons and the sheet template
 ```

@@ -15,40 +15,7 @@
  *    - Site:        one store setting per row: key | value | notes.
  *    - How to use:  plain instructions for editing by hand (not read by code).
  *
- *  FIRST-TIME SETUP (about 10 minutes, done once)
- *  1. Open the store's Google Sheet. Click Share, then General access, and set
- *     it to "Anyone with the link" with the role "Viewer". The public website
- *     needs this to read the albums.
- *  2. In the sheet, click Extensions, then Apps Script.
- *  3. Delete the sample code in the editor, paste this whole file in, and click
- *     the save icon.
- *  4. In the Apps Script editor, click the gear icon (Project Settings). Under
- *     "Script properties", click "Add script property":
- *        Property: ADMIN_PASSWORD      Value: a password you choose
- *     Click "Save script properties". Keep this password private.
- *  5. Back in the editor, choose "setup" from the function menu at the top and
- *     click Run. Google asks you to review permissions: choose your account,
- *     click Advanced, then "Go to ...", then Allow. If it stopped, run it again.
- *     Open the execution log (View, then Logs) to see what it did. Running setup
- *     again is always safe; it never deletes your data.
- *  6. Click Deploy, then New deployment. Click the gear icon next to "Select
- *     type" and choose "Web app". Set:
- *        Execute as: Me
- *        Who has access: Anyone
- *     Click Deploy, authorize again if asked, and copy the "Web app URL" (it
- *     ends in /exec). Paste it into the admin panel's Connection tab, and give it
- *     to whoever maintains the website.
- *  7. The sheet ID is the long code between /d/ and /edit in the sheet's address.
- *     It also goes into the website's docs/config.json, next to the Web app URL.
- *
- *  UPDATING THIS SCRIPT LATER (the Web app URL stays the same)
- *  1. Paste the new version into the editor and save.
- *  2. Choose "setup" from the function menu and click Run, then Allow if Google
- *     asks for a new permission (Auto-fill needs one to contact Spotify, Apple
- *     and Deezer). Running setup again is always safe.
- *  3. Click Deploy, Manage deployments, the pencil icon, set Version to
- *     "New version", and click Deploy. Do NOT choose "New deployment" again:
- *     that creates a new URL.
+ *  Setup and updates: ops/initial_setup.md and ops/maintenance.md.
  *
  *  Anyone who can EDIT the sheet can also see the script properties, so give
  *  edit access only to people you trust.
@@ -1357,6 +1324,6 @@ function setup() {
   } else {
     Logger.log('Nothing to change: the sheet was already set up.');
   }
-  Logger.log('Setup finished. Next: Deploy, New deployment (see the instructions at the top of Code.gs).');
+  Logger.log('Setup finished. Next: Deploy, New deployment (see ops/initial_setup.md).');
   return { ok: true, changes: changes };
 }
